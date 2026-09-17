@@ -1,0 +1,119 @@
+$face-border: rgb(255 255 255 / 28%);
+$face-highlight: rgb(255 255 255 / 22%);
+$face-top: rgb(214 40 52 / 86%);
+$face-bottom: rgb(140 18 28 / 82%);
+
+/* Keep the animated surface on the compositor and input on the flat stage. */
+.stage {
+  --die-size: clamp(120px, 28vmin, 220px);
+  --die-half: calc(var(--die-size) / 2);
+
+  position: relative;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3rem;
+
+  width: 100%;
+  min-height: 100vh;
+
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  contain: layout paint;
+}
+
+.stage:active {
+  cursor: grabbing;
+}
+
+.scene {
+  perspective: 900px;
+  perspective-origin: 50% 50%;
+}
+
+.cube {
+  position: relative;
+
+  width: var(--die-size);
+  height: var(--die-size);
+
+  transform-style: preserve-3d;
+  will-change: transform;
+  transition-property: transform;
+  transition-duration: 0ms;
+  transition-timing-function: linear;
+}
+
+.cube.is-dragging {
+  transition-duration: 0ms;
+}
+
+.face {
+  position: absolute;
+  inset: 0.5px;
+
+  box-sizing: border-box;
+
+  background:
+    radial-gradient(circle at 30% 25%, $face-highlight, transparent 60%),
+    linear-gradient(145deg, $face-top, $face-bottom);
+  border: 1px solid $face-border;
+  border-radius: 14px;
+  outline: 1px solid transparent;
+
+  pointer-events: none;
+}
+
+.pips {
+  position: absolute;
+  inset: 12%;
+
+  display: grid;
+  place-items: center;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+}
+
+.pip {
+  width: 44%;
+
+  background: #fff;
+  border-radius: 50%;
+  aspect-ratio: 1;
+}
+
+.face--front {
+  transform: translateZ(var(--die-half));
+}
+
+.face--back {
+  transform: rotateY(180deg) translateZ(var(--die-half));
+}
+
+.face--right {
+  transform: rotateY(90deg) translateZ(var(--die-half));
+}
+
+.face--left {
+  transform: rotateY(-90deg) translateZ(var(--die-half));
+}
+
+.face--top {
+  transform: rotateX(90deg) translateZ(var(--die-half));
+}
+
+.face--bottom {
+  transform: rotateX(-90deg) translateZ(var(--die-half));
+}
+
+.hint {
+  margin: 0;
+
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  text-align: center;
+  color: rgb(255 255 255 / 60%);
+}

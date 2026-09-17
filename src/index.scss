@@ -1,0 +1,24 @@
+@use './styles/tokens' as tokens;
+
+:root {
+  --page-background: #292929;
+
+  font-family: tokens.$font-family;
+  color: tokens.$text-color;
+
+  background: var(--page-background);
+  font-synthesis: none;
+  text-rendering: optimizelegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+
+  background: var(--page-background);
+}

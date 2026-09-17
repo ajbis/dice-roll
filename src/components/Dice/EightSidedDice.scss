@@ -1,0 +1,21 @@
+.stage--eight-sided {
+  --die-size: clamp(180px, 42vmin, 320px);
+
+  background: #292929;
+}
+
+.three-scene {
+  position: relative;
+
+  width: var(--die-size);
+  height: var(--die-size);
+
+  contain: layout paint;
+}
+
+.three-scene canvas {
+  display: block;
+
+  width: 100%;
+  height: 100%;
+}

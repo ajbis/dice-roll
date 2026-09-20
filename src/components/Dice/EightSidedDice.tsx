@@ -86,7 +86,7 @@ const createLabel = (value: FaceValue) => {
 
   if (!context) return null;
 
-  context.font = '700 252px system-ui, sans-serif';
+  context.font = '700 252px dice-font, system-ui, sans-serif';
   context.textAlign = 'center';
   context.textBaseline = 'middle';
   context.fillStyle = '#ecfdf5';
@@ -332,13 +332,17 @@ export default function EightSidedDice() {
       }),
     );
 
-    FACE_BASES.forEach((face, index) => {
-      const label = createLabel((index + 1) as FaceValue);
-      if (!label) return;
-      label.position.copy(face.normal).multiplyScalar(FACE_CENTER);
-      label.quaternion.copy(face.orientation);
-      mesh.add(label);
-    });
+    const addLabels = () => {
+      FACE_BASES.forEach((face, index) => {
+        const label = createLabel((index + 1) as FaceValue);
+        if (!label) return;
+        label.position.copy(face.normal).multiplyScalar(FACE_CENTER);
+        label.quaternion.copy(face.orientation);
+        mesh.add(label);
+      });
+    };
+
+    void document.fonts.load('700 252px dice-font').then(addLabels);
 
     scene.add(mesh);
     scene.add(new THREE.HemisphereLight(0xecfdf5, 0x064e3b, 2.2));

@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchDiceRoll } from '../../utils/rollDice';
+import {
+  COLOR_PALETTES,
+  resolveOpacity,
+  type DiceColor,
+} from '../../utils/settings';
 import './Dice.scss';
 
 type FaceValue = 1 | 2 | 3 | 4 | 5 | 6;
@@ -97,7 +102,15 @@ function Pips({ value }: { value: FaceValue }) {
   );
 }
 
-export default function SixSidedDice() {
+type SixSidedDiceProps = {
+  color?: DiceColor;
+  translucent?: boolean;
+};
+
+export default function SixSidedDice({
+  color = 'red',
+  translucent = true,
+}: SixSidedDiceProps) {
   const [rotation, setRotation] = useState<Rotation>({ x: 0, y: 0 });
   const [transition, setTransition] = useState<TransitionState>({
     ms: 0,
@@ -116,6 +129,11 @@ export default function SixSidedDice() {
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   rotationRef.current = rotation;
+
+  const palette = COLOR_PALETTES[color];
+  const opacity = resolveOpacity(6, translucent);
+  const faceTop = `rgb(${palette.cssTop.join(' ')} / ${opacity})`;
+  const faceBottom = `rgb(${palette.cssBottom.join(' ')} / ${opacity})`;
 
   const applyRotation = useCallback(
     (next: Rotation, ms: number, easing = 'ease-out') => {
@@ -249,6 +267,13 @@ export default function SixSidedDice() {
     <div
       ref={stageRef}
       className="stage"
+      style={
+        {
+          '--face-top': faceTop,
+          '--face-bottom': faceBottom,
+          '--die-fg': palette.label,
+        } as React.CSSProperties
+      }
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}

@@ -1,12 +1,13 @@
 $face-border: rgb(255 255 255 / 28%);
 $face-highlight: rgb(255 255 255 / 22%);
-$face-top: rgb(214 40 52 / 86%);
-$face-bottom: rgb(140 18 28 / 82%);
 
 /* Keep the animated surface on the compositor and input on the flat stage. */
 .stage {
   --die-size: clamp(120px, 28vmin, 220px);
   --die-half: calc(var(--die-size) / 2);
+  --face-top: rgb(214 40 52 / 0.85);
+  --face-bottom: rgb(140 18 28 / 0.85);
+  --die-fg: #fff;
 
   position: relative;
 
@@ -59,7 +60,7 @@ $face-bottom: rgb(140 18 28 / 82%);
 
   background:
     radial-gradient(circle at 30% 25%, $face-highlight, transparent 60%),
-    linear-gradient(145deg, $face-top, $face-bottom);
+    linear-gradient(145deg, var(--face-top), var(--face-bottom));
   border: 1px solid $face-border;
   border-radius: 14px;
   outline: 1px solid transparent;
@@ -80,7 +81,7 @@ $face-bottom: rgb(140 18 28 / 82%);
 .pip {
   width: 44%;
 
-  background: #fff;
+  background: var(--die-fg);
   border-radius: 50%;
   aspect-ratio: 1;
 }

@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { fetchDiceRoll } from '../../utils/rollDice';
+import {
+  COLOR_PALETTES,
+  resolveOpacity,
+  type DiceColor,
+} from '../../utils/settings';
 import './TenSidedDice.scss';
 
 type FaceValue = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
@@ -108,7 +113,7 @@ const computeFaceCenter = (verts: readonly [number, number, number][]) => {
 
 const createFaceBasis = (faceIndex: number): FaceBasis => {
   const faceVerts = FACES[faceIndex].map(
-    (i) => VERTICES[i] as [number, number, number],
+    (i) => VERTICES[i],
   );
   const center = computeFaceCenter(faceVerts);
   const normal = computeFaceNormal(faceVerts, center);
@@ -136,7 +141,7 @@ const targetOrientationForFace = (face: FaceBasis) => {
   return new THREE.Quaternion().setFromUnitVectors(face.normal, cameraNormal);
 };
 
-const createLabel = (value: FaceValue) => {
+const createLabel = (value: FaceValue, labelColor: string) => {
   const canvas = document.createElement('canvas');
   canvas.width = 256;
   canvas.height = 256;
@@ -147,7 +152,7 @@ const createLabel = (value: FaceValue) => {
   context.font = '700 180px dice-font, system-ui, sans-serif';
   context.textAlign = 'center';
   context.textBaseline = 'middle';
-  context.fillStyle = '#111827';
+  context.fillStyle = labelColor;
   context.fillText(String(value === 10 ? 0 : value), 128, 136);
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -174,7 +179,15 @@ const rotationFromQuaternion = (quaternion: THREE.Quaternion): Rotation => {
   };
 };
 
-export default function TenSidedDice() {
+type TenSidedDiceProps = {
+  color?: DiceColor;
+  translucent?: boolean;
+};
+
+export default function TenSidedDice({
+  color = 'red',
+  translucent = true,
+}: TenSidedDiceProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const meshRef = useRef<THREE.Mesh | null>(null);
   const renderFrameRef = useRef<number | null>(null);
@@ -394,32 +407,35 @@ export default function TenSidedDice() {
       const ny = normal.y;
       const nz = normal.z;
 
-      vertices.push(...v0, ...v1, ...v2, ...v0, ...v2, ...v3);
+      vertices.push(...v0, ...v2, ...v1, ...v0, ...v3, ...v2);
       normals.push(nx, ny, nz, nx, ny, nz, nx, ny, nz, nx, ny, nz, nx, ny, nz, nx, ny, nz);
     }
 
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
     geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
 
+    const palette = COLOR_PALETTES[color];
+    const opacity = resolveOpacity(10, translucent);
+
     const mesh = new THREE.Mesh(
       geometry,
       new THREE.MeshStandardMaterial({
-        color: 0xf0f0f0,
+        color: palette.hex,
         roughness: 0.4,
         metalness: 0.0,
-        flatShading: true,
-        transparent: true,
-        opacity: 0.9,
-        depthWrite: false,
+        flatShading: false,
+        transparent: translucent,
+        opacity,
+        depthWrite: !translucent,
       }),
     );
 
     const addLabels = () => {
       FACE_BASES.forEach((face, index) => {
-        const label = createLabel(FACE_TO_NUMBER[index]);
+        const label = createLabel(FACE_TO_NUMBER[index], palette.label);
         if (!label) return;
         const center = computeFaceCenter(
-          FACES[index].map((i) => VERTICES[i] as [number, number, number]),
+          FACES[index].map((i) => VERTICES[i]),
         );
         label.position.copy(center);
         label.position.addScaledVector(face.normal, 0.01);
@@ -477,7 +493,7 @@ export default function TenSidedDice() {
       mount.removeChild(renderer.domElement);
       meshRef.current = null;
     };
-  }, []);
+  }, [color, translucent]);
 
   return (
     <div

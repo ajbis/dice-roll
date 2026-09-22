@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { fetchDiceRoll } from '../../utils/rollDice';
+import {
+  COLOR_PALETTES,
+  resolveOpacity,
+  type DiceColor,
+} from '../../utils/settings';
 import './EightSidedDice.scss';
 
 type FaceValue = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
@@ -78,7 +83,7 @@ const targetOrientationForFace = (face: FaceBasis) => {
   return new THREE.Quaternion().setFromUnitVectors(face.normal, cameraNormal);
 };
 
-const createLabel = (value: FaceValue) => {
+const createLabel = (value: FaceValue, labelColor: string) => {
   const canvas = document.createElement('canvas');
   canvas.width = 256;
   canvas.height = 256;
@@ -89,7 +94,7 @@ const createLabel = (value: FaceValue) => {
   context.font = '700 200px dice-font, system-ui, sans-serif';
   context.textAlign = 'center';
   context.textBaseline = 'middle';
-  context.fillStyle = '#ecfdf5';
+  context.fillStyle = labelColor;
   context.shadowColor = 'rgba(0, 0, 0, 0.35)';
   context.shadowBlur = 6;
   context.fillText(String(value), 128, 136);
@@ -118,7 +123,15 @@ const rotationFromQuaternion = (quaternion: THREE.Quaternion): Rotation => {
   };
 };
 
-export default function EightSidedDice() {
+type EightSidedDiceProps = {
+  color?: DiceColor;
+  translucent?: boolean;
+};
+
+export default function EightSidedDice({
+  color = 'red',
+  translucent = true,
+}: EightSidedDiceProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const meshRef = useRef<THREE.Mesh | null>(null);
   const renderFrameRef = useRef<number | null>(null);
@@ -319,22 +332,25 @@ export default function EightSidedDice() {
     renderer.setClearColor(0x000000, 0);
     mount.appendChild(renderer.domElement);
 
+    const palette = COLOR_PALETTES[color];
+    const opacity = resolveOpacity(8, translucent);
+
     const mesh = new THREE.Mesh(
       new THREE.OctahedronGeometry(1.7, 0),
       new THREE.MeshStandardMaterial({
-        color: 0x10b981,
+        color: palette.hex,
         roughness: 0.46,
         metalness: 0.08,
         flatShading: true,
-        transparent: true,
-        opacity: 0.8,
-        depthWrite: false,
+        transparent: translucent,
+        opacity,
+        depthWrite: !translucent,
       }),
     );
 
     const addLabels = () => {
       FACE_BASES.forEach((face, index) => {
-        const label = createLabel((index + 1) as FaceValue);
+        const label = createLabel((index + 1) as FaceValue, palette.label);
         if (!label) return;
         label.position.copy(face.normal).multiplyScalar(FACE_CENTER);
         label.quaternion.copy(face.orientation);
@@ -345,8 +361,9 @@ export default function EightSidedDice() {
     void document.fonts.load('700 200px dice-font').then(addLabels);
 
     scene.add(mesh);
-    scene.add(new THREE.HemisphereLight(0xecfdf5, 0x064e3b, 2.2));
-    const keyLight = new THREE.DirectionalLight(0xffffff, 2.8);
+    scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xbbbbbb, 1.0));
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.0);
     keyLight.position.set(3, 4, 5);
     scene.add(keyLight);
 
@@ -390,7 +407,7 @@ export default function EightSidedDice() {
       mount.removeChild(renderer.domElement);
       meshRef.current = null;
     };
-  }, []);
+  }, [color, translucent]);
 
   return (
     <div

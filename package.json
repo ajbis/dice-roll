@@ -6,6 +6,7 @@
   "packageManager": "yarn@4.14.1",
   "scripts": {
     "dev": "vite",
+    "start": "vite --host 0.0.0.0",
     "build": "vite build",
     "typecheck": "tsc -b",
     "preview": "vite preview",

@@ -40,15 +40,31 @@ const SNAP_BACK_MS = 260;
 const degrees = Math.PI / 180;
 const LABEL_SIZE = 0.7;
 
-const RADIUS = 1.7;
+const RADIUS = 2.2;
 const SQUASH = 0.85;
 const POLE_Y = RADIUS * 0.9 * SQUASH;
-const RING_RADIUS = RADIUS * 0.45;
-const RING_Y = RADIUS * 0.15 * SQUASH;
+const RING_RADIUS = RADIUS * 0.65;
+const RING_Y = POLE_Y * 0.105573;
+const CUT_Y = POLE_Y * 0.8;
+const CUT_T = (POLE_Y - CUT_Y) / (POLE_Y - RING_Y);
 
 const VERTICES: readonly [number, number, number][] = [
-  [0, POLE_Y, 0],
-  [0, -POLE_Y, 0],
+  ...([0, 1, 2, 3, 4] as const).map(
+    (i) =>
+      [
+        CUT_T * RING_RADIUS * Math.cos((i * 2 * Math.PI) / 5),
+        CUT_Y,
+        CUT_T * RING_RADIUS * Math.sin((i * 2 * Math.PI) / 5),
+      ] as [number, number, number],
+  ),
+  ...([0, 1, 2, 3, 4] as const).map(
+    (i) =>
+      [
+        CUT_T * RING_RADIUS * Math.cos(((i + 0.5) * 2 * Math.PI) / 5),
+        -CUT_Y,
+        CUT_T * RING_RADIUS * Math.sin(((i + 0.5) * 2 * Math.PI) / 5),
+      ] as [number, number, number],
+  ),
   ...([0, 1, 2, 3, 4] as const).map(
     (i) =>
       [
@@ -68,16 +84,18 @@ const VERTICES: readonly [number, number, number][] = [
 ];
 
 const FACES: readonly (readonly number[])[] = [
-  [0, 2, 7, 3],
-  [0, 3, 8, 4],
-  [0, 4, 9, 5],
-  [0, 5, 10, 6],
-  [0, 6, 11, 2],
-  [1, 8, 3, 7],
-  [1, 9, 4, 8],
-  [1, 10, 5, 9],
-  [1, 11, 6, 10],
-  [1, 7, 2, 11],
+  [0, 10, 15, 11, 1],
+  [1, 11, 16, 12, 2],
+  [2, 12, 17, 13, 3],
+  [3, 13, 18, 14, 4],
+  [4, 14, 19, 10, 0],
+  [5, 6, 16, 11, 15],
+  [6, 7, 17, 12, 16],
+  [7, 8, 18, 13, 17],
+  [8, 9, 19, 14, 18],
+  [9, 5, 15, 10, 19],
+  [0, 1, 2, 3, 4],
+  [5, 6, 7, 8, 9],
 ];
 
 const FACE_TO_NUMBER: readonly FaceValue[] = [
@@ -134,7 +152,9 @@ const createFaceBasis = (faceIndex: number): FaceBasis => {
   };
 };
 
-const FACE_BASES = Array.from({ length: 10 }, (_, i) => createFaceBasis(i));
+const FACE_BASES = Array.from({ length: FACE_TO_NUMBER.length }, (_, i) =>
+  createFaceBasis(i),
+);
 
 const targetOrientationForFace = (face: FaceBasis) => {
   const cameraNormal = new THREE.Vector3(0, 0, 1);
@@ -394,21 +414,27 @@ export default function TenSidedDice({
     const normals: number[] = [];
 
     for (const face of FACES) {
-      const [i0, i1, i2, i3] = face;
-      const v0 = VERTICES[i0];
-      const v1 = VERTICES[i1];
-      const v2 = VERTICES[i2];
-      const v3 = VERTICES[i3];
-
-      const faceVerts = [v0, v1, v2, v3] as [number, number, number][];
+      const faceVerts = face.map((i) => VERTICES[i]);
       const center = computeFaceCenter(faceVerts);
       const normal = computeFaceNormal(faceVerts, center);
       const nx = normal.x;
       const ny = normal.y;
       const nz = normal.z;
 
-      vertices.push(...v0, ...v2, ...v1, ...v0, ...v3, ...v2);
-      normals.push(nx, ny, nz, nx, ny, nz, nx, ny, nz, nx, ny, nz, nx, ny, nz, nx, ny, nz);
+      const [a, b, c] = faceVerts;
+      const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]] as const;
+      const ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]] as const;
+      const geoNx = ab[1] * ac[2] - ab[2] * ac[1];
+      const geoNy = ab[2] * ac[0] - ab[0] * ac[2];
+      const geoNz = ab[0] * ac[1] - ab[1] * ac[0];
+      const outward =
+        geoNx * center.x + geoNy * center.y + geoNz * center.z >= 0;
+      const ordered = outward ? faceVerts : [...faceVerts].reverse();
+
+      for (let i = 1; i < ordered.length - 1; i++) {
+        vertices.push(...ordered[0], ...ordered[i], ...ordered[i + 1]);
+        normals.push(nx, ny, nz, nx, ny, nz, nx, ny, nz);
+      }
     }
 
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));

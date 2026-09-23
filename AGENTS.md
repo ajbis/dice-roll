@@ -9,6 +9,12 @@
 - `yarn lint` / `yarn lint:styles` — eslint / stylelint
 - `yarn format` — prettier
 
+## Git
+
+- No global gitconfig on this machine — set identity per-commit (do not write git config):
+  `git -c user.name='ajbis' -c user.email='1932972+ajbis@users.noreply.github.com' commit ...`
+  (matches all existing commit authors)
+
 ## Settings query strings (`src/utils/settings.ts`)
 
 - `s` = `6 | 8 | 10`, `c` = `red | green | white`, `translucent` (alias `t`) = `true | false`

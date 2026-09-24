@@ -161,6 +161,8 @@ const targetOrientationForFace = (face: FaceBasis) => {
   return new THREE.Quaternion().setFromUnitVectors(face.normal, cameraNormal);
 };
 
+const FAR_LABEL_COLOR = '#ffffff';
+
 const createLabel = (value: FaceValue, labelColor: string) => {
   const canvas = document.createElement('canvas');
   canvas.width = 256;
@@ -180,7 +182,7 @@ const createLabel = (value: FaceValue, labelColor: string) => {
   const material = new THREE.MeshBasicMaterial({
     map: texture,
     transparent: true,
-    side: THREE.DoubleSide,
+    side: THREE.FrontSide,
     depthWrite: false,
   });
   const label = new THREE.Mesh(
@@ -456,9 +458,15 @@ export default function TenSidedDice({
       }),
     );
 
+    const labelFlip = new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(0, 1, 0),
+      Math.PI,
+    );
+
     const addLabels = () => {
       FACE_BASES.forEach((face, index) => {
-        const label = createLabel(FACE_TO_NUMBER[index], palette.label);
+        const value = FACE_TO_NUMBER[index];
+        const label = createLabel(value, palette.label);
         if (!label) return;
         const center = computeFaceCenter(
           FACES[index].map((i) => VERTICES[i]),
@@ -467,6 +475,13 @@ export default function TenSidedDice({
         label.position.addScaledVector(face.normal, 0.01);
         label.quaternion.copy(face.orientation);
         mesh.add(label);
+
+        const far = createLabel(value, FAR_LABEL_COLOR);
+        if (!far) return;
+        far.position.copy(center);
+        far.position.addScaledVector(face.normal, -0.05);
+        far.quaternion.copy(face.orientation).multiply(labelFlip);
+        mesh.add(far);
       });
     };
 

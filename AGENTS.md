@@ -19,8 +19,9 @@
 
 - `s` = `6 | 8 | 10`, `c` = `red | green | white`, `translucent` (alias `t`) = `true | false`
 - Defaults: **red, 6 sides, translucent true**; non-whitelisted/missing → default
-- Opacity is keyed by **sides**, not color: 6 → 0.85, 8 → 0.8, 10 → 0.9; `translucent=false` → 1.0
+- Opacity is keyed by **sides**, not color: 6 → 0.85, 8 → 0.85, 10 → 0.9; `translucent=false` → 1.0
 - Color palette (`COLOR_PALETTES`) drives material hex, D6 CSS gradient rgb, and label color only
+- Far-side number visibility: every D8/D10 face gets **two complementary `FrontSide` labels** — an outward one with `palette.label` (seen normally) and a duplicate flipped 180° about local Y to face inward with a white glyph (`FAR_LABEL_COLOR`). Through the die the dark outward one is back-face-culled and the inward white one shows, drawn *before* the body (z-sort) → solid faint number at `(1−α)·|white − page|`, identical for every palette. Far labels sit slightly *inside* the body (`FACE_CENTER − 0.2` D8, `center − 0.05·n` D10) so depth culling hides them when `translucent=false`. D6 CSS stacks labels over their own face — exempt
 
 ## D10 truncation (`src/components/Dice/TenSidedDice.tsx`)
 

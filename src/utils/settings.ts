@@ -47,7 +47,7 @@ export const DEFAULT_SETTINGS: Settings = {
 
 const SIDES_OPACITY: Record<DiceSides, number> = {
   6: 0.85,
-  8: 0.8,
+  8: 0.85,
   10: 0.9,
 };
 

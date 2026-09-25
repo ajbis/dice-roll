@@ -1,5 +1,6 @@
 export default {
   extends: ['stylelint-config-standard-scss'],
+  ignoreFiles: ['dist/**', 'docs/**', 'node_modules/**'],
   plugins: ['stylelint-order'],
   rules: {
     'declaration-empty-line-before': null,

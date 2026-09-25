@@ -14,7 +14,7 @@ const typeCheckedConfigs = tseslint.configs.recommendedTypeChecked.map(
 
 export default tseslint.config(
   {
-    ignores: ['dist', 'node_modules'],
+    ignores: ['dist', 'docs', 'node_modules'],
   },
   js.configs.recommended,
   ...typeCheckedConfigs,

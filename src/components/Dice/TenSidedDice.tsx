@@ -478,6 +478,7 @@ export default function TenSidedDice({
 
         const far = createLabel(value, FAR_LABEL_COLOR);
         if (!far) return;
+        far.renderOrder = -1;
         far.position.copy(center);
         far.position.addScaledVector(face.normal, -0.05);
         far.quaternion.copy(face.orientation).multiply(labelFlip);

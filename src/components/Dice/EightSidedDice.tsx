@@ -366,6 +366,7 @@ export default function EightSidedDice({
 
         const far = createLabel(value, FAR_LABEL_COLOR);
         if (!far) return;
+        far.renderOrder = -1;
         far.position.copy(face.normal).multiplyScalar(FACE_CENTER - 0.2);
         far.quaternion.copy(face.orientation).multiply(labelFlip);
         mesh.add(far);

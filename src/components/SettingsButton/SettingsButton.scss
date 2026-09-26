@@ -1,0 +1,62 @@
+/* Cog: four skewed oblongs rotated around the centre; hub punches the hole. */
+.settings-button {
+  color: rgb(255 255 255 / 75%);
+}
+
+.settings-button__cog {
+  position: relative;
+
+  width: 22px;
+  height: 22px;
+}
+
+/*
+ * Oblong tooth: skewed in its own frame first, then rotated around the
+ * centre (CSS applies transform functions right to left).
+ */
+.settings-button__tooth {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+
+  width: 7px;
+  height: 22px;
+
+  margin-top: -11px;
+  margin-left: -3.5px;
+
+  background: currentColor;
+  border-radius: 4px;
+}
+
+.settings-button__tooth--0 {
+  transform: rotate(0deg) skewY(14deg);
+}
+
+.settings-button__tooth--45 {
+  transform: rotate(45deg) skewY(14deg);
+}
+
+.settings-button__tooth--90 {
+  transform: rotate(90deg) skewY(14deg);
+}
+
+.settings-button__tooth--135 {
+  transform: rotate(135deg) skewY(14deg);
+}
+
+/* Punches the donut hole through the crossed teeth. */
+.settings-button__hub {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+
+  width: 8px;
+  height: 8px;
+
+  margin-top: -4px;
+  margin-left: -4px;
+
+  background: var(--page-background);
+  border-radius: 50%;
+}

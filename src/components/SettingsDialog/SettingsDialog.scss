@@ -1,0 +1,229 @@
+.settings-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+
+  display: grid;
+  place-items: center;
+
+  color: rgb(255 255 255 / 75%);
+
+  background: rgb(0 0 0 / 0.7);
+}
+
+.settings-dialog__close {
+  color: rgb(255 255 255 / 90%);
+}
+
+.settings-dialog__x {
+  position: relative;
+
+  width: 22px;
+  height: 22px;
+}
+
+/* Two crossed oblongs — same tooth proportions as the cog. */
+.settings-dialog__x-bar {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+
+  width: 7px;
+  height: 22px;
+
+  margin-top: -11px;
+  margin-left: -3.5px;
+
+  background: currentColor;
+  border-radius: 4px;
+}
+
+.settings-dialog__x-bar--45 {
+  transform: rotate(45deg);
+}
+
+.settings-dialog__x-bar--135 {
+  transform: rotate(135deg);
+}
+
+.settings-dialog__content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+/* Sides fieldset — 6 | 8 | 10 */
+
+.sides-picker {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.sides-picker__options {
+  display: flex;
+  align-items: center;
+}
+
+.sides-picker__option {
+  position: relative;
+}
+
+.sides-picker__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.sides-picker__label {
+  display: grid;
+  place-items: center;
+
+  width: 60px;
+  height: 60px;
+
+  font-family: dice-font, system-ui, sans-serif;
+  font-size: 2rem;
+  font-weight: 400;
+
+  cursor: pointer;
+}
+
+.sides-picker__input:checked + .sides-picker__label {
+  font-weight: 700;
+}
+
+.sides-picker__input:focus-visible + .sides-picker__label {
+  outline: 2px solid rgb(255 255 255 / 80%);
+  outline-offset: 2px;
+}
+
+.sides-picker__divider {
+  width: 2px;
+  height: 32px;
+
+  background: rgb(255 255 255 / 35%);
+}
+
+/* Color fieldset — squircle swatches */
+
+.color-picker {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.color-picker__options {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.color-picker__option {
+  position: relative;
+}
+
+.color-picker__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.color-picker__label {
+  display: block;
+
+  width: 36px;
+  height: 36px;
+
+  border: 1px solid rgb(255 255 255 / 50%);
+  border-radius: 10px;
+
+  cursor: pointer;
+  box-shadow: inset 0 1px 2px rgb(255 255 255 / 30%);
+}
+
+.color-picker__input:checked + .color-picker__label {
+  outline: 2px solid rgb(255 255 255 / 85%);
+  outline-offset: 2px;
+}
+
+.color-picker__input:focus-visible + .color-picker__label {
+  outline: 2px solid rgb(255 255 255 / 85%);
+  outline-offset: 4px;
+}
+
+/* Translucent row — oblong toggle matching the icon style */
+
+.translucent-toggle {
+  position: relative;
+
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  cursor: pointer;
+}
+
+.translucent-toggle__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.translucent-toggle__text {
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.translucent-toggle__track {
+  position: relative;
+
+  width: 56px;
+  height: 30px;
+
+  border: 1px solid rgb(255 255 255 / 50%);
+  border-radius: 15px;
+}
+
+/* 28px circle = inner track height, so its rim stays concentric with
+   the capsule ends at either stop. */
+.translucent-toggle__knob {
+  position: absolute;
+  top: 0;
+  left: 0;
+
+  width: 28px;
+  height: 28px;
+
+  background: rgb(255 255 255 / 90%);
+  border-radius: 50%;
+}
+
+.translucent-toggle__input:checked
+  ~ .translucent-toggle__track
+    .translucent-toggle__knob {
+  transform: translateX(26px);
+  box-shadow: 0 0 12px 3px rgb(0 229 255 / 75%);
+}
+
+.translucent-toggle__input:focus-visible ~ .translucent-toggle__track {
+  outline: 2px solid rgb(255 255 255 / 85%);
+  outline-offset: 4px;
+}

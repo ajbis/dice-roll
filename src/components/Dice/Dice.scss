@@ -5,8 +5,8 @@ $face-highlight: rgb(255 255 255 / 22%);
 .stage {
   --die-size: clamp(120px, 28vmin, 220px);
   --die-half: calc(var(--die-size) / 2);
-  --face-top: rgb(214 40 52 / 0.85);
-  --face-bottom: rgb(140 18 28 / 0.85);
+  --face-top: rgb(214 40 52 / 85%);
+  --face-bottom: rgb(140 18 28 / 85%);
   --die-fg: #fff;
 
   position: relative;

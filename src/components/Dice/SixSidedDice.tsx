@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchDiceRoll } from '../../utils/rollDice';
+import { planCssRoll } from '../../utils/rollAnimation';
 import {
   COLOR_PALETTES,
   resolveOpacity,
@@ -82,11 +83,7 @@ const SNAP_BACK_MS = 260;
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
-const mod360 = (value: number) => ((value % 360) + 360) % 360;
 const quantize = (degrees: number) => Math.round(degrees * 10) / 10;
-
-const continueTo = (from: number, target: number, direction: number) =>
-  direction >= 0 ? from + mod360(target - from) : from - mod360(from - target);
 
 function Pips({ value }: { value: FaceValue }) {
   return (
@@ -151,24 +148,13 @@ export default function SixSidedDice({
     try {
       const value = await fetchDiceRoll(6);
       const face = FACES[value];
-      const turnsX = 3 + Math.floor(Math.random() * 5);
-      const turnsY = SPIN_TURNS - turnsX;
-      const dirX = Math.random() < 0.5 ? -1 : 1;
-      const dirY = Math.random() < 0.5 ? -1 : 1;
       const from = rotationRef.current;
-      const spun: Rotation = {
-        x: from.x + dirX * 360 * turnsX,
-        y: from.y + dirY * 360 * turnsY,
-      };
+      const { spun, landed } = planCssRoll(from, face.orientation, SPIN_TURNS);
 
       applyRotation(spun, SPIN_MS, 'cubic-bezier(0.4, 0, 0.35, 1)');
 
       timersRef.current.push(
         setTimeout(() => {
-          const landed = {
-            x: continueTo(spun.x, face.orientation.x, dirX),
-            y: continueTo(spun.y, face.orientation.y, dirY),
-          };
           restRef.current = landed;
           applyRotation(landed, SETTLE_MS, 'cubic-bezier(0.22, 1, 0.36, 1)');
         }, SPIN_MS),

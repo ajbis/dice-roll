@@ -8,7 +8,7 @@
 
   color: rgb(255 255 255 / 75%);
 
-  background: rgb(0 0 0 / 0.7);
+  background: rgb(0 0 0 / 70%);
 }
 
 .settings-dialog__close {
@@ -31,11 +31,11 @@
   width: 7px;
   height: 22px;
 
-  margin-top: -11px;
+  background: currentcolor;
+  border-radius: 4px;
   margin-left: -3.5px;
 
-  background: currentColor;
-  border-radius: 4px;
+  margin-top: -11px;
 }
 
 .settings-dialog__x-bar--45 {
@@ -58,6 +58,7 @@
 .sides-picker {
   margin: 0;
   padding: 0;
+
   border: 0;
 }
 
@@ -72,6 +73,7 @@
 
 .sides-picker__input {
   position: absolute;
+
   width: 1px;
   height: 1px;
   margin: 0;
@@ -82,6 +84,8 @@
 }
 
 .sides-picker__label {
+  position: relative;
+
   display: grid;
   place-items: center;
 
@@ -95,8 +99,30 @@
   cursor: pointer;
 }
 
+/* Selection dot below the number, inside the 60px square — centred in the
+   gap between the digit's baseline (~41px) and the focus outline (~62px). */
+.sides-picker__label::after {
+  position: absolute;
+  bottom: 5.5px;
+  left: 50%;
+
+  width: 6px;
+  height: 6px;
+
+  background: rgb(255 255 255);
+  border-radius: 50%;
+
+  opacity: 0;
+  content: '';
+  margin-left: -3px;
+}
+
 .sides-picker__input:checked + .sides-picker__label {
-  font-weight: 700;
+  color: #fff;
+}
+
+.sides-picker__input:checked + .sides-picker__label::after {
+  opacity: 1;
 }
 
 .sides-picker__input:focus-visible + .sides-picker__label {
@@ -116,6 +142,7 @@
 .color-picker {
   margin: 0;
   padding: 0;
+
   border: 0;
 }
 
@@ -131,6 +158,7 @@
 
 .color-picker__input {
   position: absolute;
+
   width: 1px;
   height: 1px;
   margin: 0;
@@ -165,6 +193,8 @@
 
 /* Translucent row — oblong toggle matching the icon style */
 
+/* +20px over the column gap: colors → translucency breathes more than the
+   other row pairs. */
 .translucent-toggle {
   position: relative;
 
@@ -173,10 +203,12 @@
   gap: 12px;
 
   cursor: pointer;
+  margin-top: 20px;
 }
 
 .translucent-toggle__input {
   position: absolute;
+
   width: 1px;
   height: 1px;
   margin: 0;

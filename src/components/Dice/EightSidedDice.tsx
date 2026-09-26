@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { fetchDiceRoll } from '../../utils/rollDice';
+import { easeOut, planRoll } from '../../utils/rollAnimation';
 import {
   COLOR_PALETTES,
   resolveOpacity,
@@ -43,7 +44,6 @@ const LABEL_SIZE = 0.864;
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
-const easeOut = (value: number) => 1 - (1 - value) ** 3;
 
 const FACE_NORMALS = [
   [1, 1, 1],
@@ -233,16 +233,7 @@ export default function EightSidedDice({
       const value = await fetchDiceRoll(8);
       const targetQuaternion = targetOrientationForFace(FACE_BASES[value - 1]);
       const from = rotationRef.current;
-      const turnsX = 3 + Math.floor(Math.random() * 5);
-      const turnsY = SPIN_TURNS - turnsX;
-      const dirX = Math.random() < 0.5 ? -1 : 1;
-      const dirY = Math.random() < 0.5 ? -1 : 1;
-      const dirZ = Math.random() < 0.5 ? -1 : 1;
-      const spun: Rotation = {
-        x: from.x + dirX * 360 * turnsX,
-        y: from.y + dirY * 360 * turnsY,
-        z: from.z + dirZ * 360 * SPIN_TURNS,
-      };
+      const spun = planRoll(from, targetQuaternion, SPIN_TURNS);
       await animateTo(spun, SPIN_MS);
       await animateQuaternion(targetQuaternion, SETTLE_MS);
       restRef.current = rotationRef.current;

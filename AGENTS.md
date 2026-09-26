@@ -23,6 +23,27 @@
 - Color palette (`COLOR_PALETTES`) drives material hex, D6 CSS gradient rgb, and label color only
 - Far-side number visibility: every D8/D10 face gets **two complementary `FrontSide` labels** — an outward one with `palette.label` (seen normally) and a duplicate flipped 180° about local Y to face inward with a white glyph (`FAR_LABEL_COLOR`). Through the die the dark outward one is back-face-culled and the inward white one shows, drawn *before* the body (z-sort) → solid faint number at `(1−α)·|white − page|`, identical for every palette. Far labels carry **`renderOrder = -1`** (painter sort checks `renderOrder` before `z`; near-silhouette faces tie with the body's center z otherwise) and sit slightly *inside* the body (`FACE_CENTER − 0.2` D8, `center − 0.05·n` D10) so depth culling hides them when `translucent=false`. D6 CSS stacks labels over their own face — exempt
 
+## Roll animation (`src/utils/rollAnimation.ts`)
+
+Goal: the settle phase continues the spin's direction — never reverses — and still lands on the rolled face.
+
+- `easeOut` lives here and is shared with `animateTo`/`animateQuaternion` so direction sampling uses the exact trajectory the animator runs
+- `planRoll(from, target, spinTurns)` — D8/D10:
+  - Settle is one fixed parent-frame axis: `â` = shortest-path axis of `fromQ⁻¹·target` (flip so `w ≥ 0`), random `ψ ∈ [0°, 180°]`, `mid = R(â, −ψ)·target`. A slerp from `mid` to `target` keeps the parent axis `â` constant for its whole run (geodesic), so `dot > 0` with `â` ⇔ never reverses
+  - 40 spin candidates (turnsX 3–7 × 8 sign combos): per axis `from + dir·360·turns + wrapDegrees(mid − ·)` → `q(spun) ≡ q(mid)` (Euler ±360k ≡), ≥ 2.5 full turns so direction dominates the wrap
+  - Keep candidates whose spin terminal direction (easeOut samples at t = 0.98 → 1.0) has `dot > 0` with `â`; pick randomly among matches, max-dot fallback when none
+- `planCssRoll(from, face, spinTurns)` — D6 (CSS `rotateX·rotateY`, easing stays cubic-bezier):
+  - Settle deltas are per-axis `dir · (10°–85°)` — same sign as the spin and **< 90°**, so the `Rx(x)·ey` basis can't swing far enough to reverse the composite rotation mid-settle
+  - Spin endpoint absorbs `wrapDegrees(face − base − Δ)` → `landed ≡ face (mod 360)` exactly; direction preserved because `|wrap| ≤ 180 < 1080`
+  - `continueTo`/`mod360` are gone — do not reintroduce 0–360° same-sign deltas
+
+Invariants (do not regress):
+
+- D8/D10 settle slerp angle ≤ π — a larger `ψ` makes THREE take the opposite shortest path (`slerp` flips on `dot < 0`)
+- D8/D10 spin must end exactly at `q(mid)` — any per-axis value not ≡ `mid (mod 360)` breaks the axis handoff
+- D6 `landed ≡ face (mod 360)` — otherwise the wrong face shows; both settle deltas must stay < 90°
+- D6/`planCssRoll` keep the original turn distribution: turnsX = 3 + floor(rand·5), turnsY = spinTurns − turnsX
+
 ## D10 truncation (`src/components/Dice/TenSidedDice.tsx`)
 
 Design decisions (locked):

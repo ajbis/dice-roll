@@ -17,21 +17,22 @@
 
 ## Settings query strings (`src/utils/settings.ts`)
 
-- `s` = `6 | 8 | 10`, `c` = `red | green | white | black | blue | yellow`, `translucent` (alias `t`) = `true | false`
+- `s` = `6 | 8 | 10 | 12`, `c` = `red | green | white | black | blue | yellow`, `translucent` (alias `t`) = `true | false`
 - Defaults: **red, 6 sides, translucent true**; non-whitelisted/missing → default
-- Opacity is keyed by **sides**, not color: 6 → 0.85, 8 → 0.85, 10 → 0.9; `translucent=false` → 1.0
+- Opacity is keyed by **sides**, not color: 6 → 0.85, 8 → 0.85, 10 → 0.9, 12 → 0.85; `translucent=false` → 1.0
 - Color palette (`COLOR_PALETTES`) drives material hex, D6 CSS gradient rgb, and label color only
-- Far-side number visibility: every D8/D10 face gets **two complementary `FrontSide` labels** — an outward one with `palette.label` (seen normally) and a duplicate flipped 180° about local Y to face inward with a white glyph (`FAR_LABEL_COLOR`). Through the die the dark outward one is back-face-culled and the inward white one shows, drawn *before* the body (z-sort) → solid faint number at `(1−α)·|white − page|`, identical for every palette. Far labels carry **`renderOrder = -1`** (painter sort checks `renderOrder` before `z`; near-silhouette faces tie with the body's center z otherwise) and sit slightly *inside* the body (`FACE_CENTER − 0.2` D8, `center − 0.05·n` D10) so depth culling hides them when `translucent=false`. D6 CSS stacks labels over their own face — exempt
+- Far-side number visibility: every D8/D10/D12 face gets **two complementary `FrontSide` labels** — an outward one with `palette.label` (seen normally) and a duplicate flipped 180° about local Y to face inward with a white glyph (`FAR_LABEL_COLOR`). Through the die the dark outward one is back-face-culled and the inward white one shows, drawn _before_ the body (z-sort) → solid faint number at `(1−α)·|white − page|`, identical for every palette. Far labels carry **`renderOrder = -1`** (painter sort checks `renderOrder` before `z`; near-silhouette faces tie with the body's center z otherwise) and sit slightly _inside_ the body (`FACE_CENTER − 0.2` D8, `center − 0.05·n` D10/D12) so depth culling hides them when `translucent=false`. D6 CSS stacks labels over their own face — exempt
 
 ## Roll animation (`src/utils/rollAnimation.ts`)
 
-Goal: the settle phase continues the spin's direction — never reverses — and still lands on the rolled face.
+Goal: the settle phase continues the spin's direction — never reverses — and lands on the rolled face upright.
 
 - `easeOut` lives here and is shared with `animateTo`/`animateQuaternion` so direction sampling uses the exact trajectory the animator runs
-- `planRoll(from, target, spinTurns)` — D8/D10:
+- `planRoll(from, target, spinTurns)` — D8/D10/D12:
   - Settle is one fixed parent-frame axis: `â` = shortest-path axis of `fromQ⁻¹·target` (flip so `w ≥ 0`), random `ψ ∈ [0°, 180°]`, `mid = R(â, −ψ)·target`. A slerp from `mid` to `target` keeps the parent axis `â` constant for its whole run (geodesic), so `dot > 0` with `â` ⇔ never reverses
   - 40 spin candidates (turnsX 3–7 × 8 sign combos): per axis `from + dir·360·turns + wrapDegrees(mid − ·)` → `q(spun) ≡ q(mid)` (Euler ±360k ≡), ≥ 2.5 full turns so direction dominates the wrap
   - Keep candidates whose spin terminal direction (easeOut samples at t = 0.98 → 1.0) has `dot > 0` with `â`; pick randomly among matches, max-dot fallback when none
+- Landing orientation (D8/D10/D12) — `uprightOrientationForFace` in each dice file: settle target = minimal-arc normal→camera rotation twisted about the camera axis by `atan2(up.x, up.y)` (in-plane angle of `face.up` after the arc), twist premultiplied. The bare arc left numbers landed at ±15°/±75° (D8), −67°…+130° (D10), 0°/±31.7°/180° (D12); the twist is a post-hoc target change, so `planRoll` invariants (target-agnostic) are unaffected
 - `planCssRoll(from, face, spinTurns)` — D6 (CSS `rotateX·rotateY`, easing stays cubic-bezier):
   - Settle deltas are per-axis `dir · (10°–85°)` — same sign as the spin and **< 90°**, so the `Rx(x)·ey` basis can't swing far enough to reverse the composite rotation mid-settle
   - Spin endpoint absorbs `wrapDegrees(face − base − Δ)` → `landed ≡ face (mod 360)` exactly; direction preserved because `|wrap| ≤ 180 < 1080`
@@ -39,8 +40,8 @@ Goal: the settle phase continues the spin's direction — never reverses — and
 
 Invariants (do not regress):
 
-- D8/D10 settle slerp angle ≤ π — a larger `ψ` makes THREE take the opposite shortest path (`slerp` flips on `dot < 0`)
-- D8/D10 spin must end exactly at `q(mid)` — any per-axis value not ≡ `mid (mod 360)` breaks the axis handoff
+- D8/D10/D12 settle slerp angle ≤ π — a larger `ψ` makes THREE take the opposite shortest path (`slerp` flips on `dot < 0`)
+- D8/D10/D12 spin must end exactly at `q(mid)` — any per-axis value not ≡ `mid (mod 360)` breaks the axis handoff
 - D6 `landed ≡ face (mod 360)` — otherwise the wrong face shows; both settle deltas must stay < 90°
 - D6/`planCssRoll` keep the original turn distribution: turnsX = 3 + floor(rand·5), turnsY = spinTurns − turnsX
 
@@ -67,3 +68,19 @@ Future tunables:
 
 - Waistband (`RING_RADIUS` factor, currently 0.65) and shallower kite zigzag — only if silhouette still misses the reference after the cut
 - `LABEL_SIZE` (0.7): re-check fit on the shorter truncated side faces
+
+## D12 (`src/components/Dice/TwelveSidedDice.tsx`)
+
+Design decisions:
+
+- Regular dodecahedron: 12 planar pentagons, no truncation/squash; circumradius 1.7 (matches the D8/D10 silhouette); 20 hard-coded vertices (φ construction × 1.7/√3), `FACES` CCW-from-outside
+- `FACE_TO_NUMBER` = `[1, 2, 3, 4, 5, 6, 8, 7, 9, 10, 11, 12]` — **opposite faces sum to 13**; roll resolves `FACE_TO_NUMBER.indexOf(value)`
+- First die with two-digit labels (10–12): canvas font `700 160px` on 256px, `LABEL_SIZE` 1.0 (worst-case inscribed square across all face orientations ≈ 1.195)
+- Builder, material, lights, and label offsets follow D10 (auto-winding fan, baked normals + `flatShading: false`, roughness 0.4, lights 1.0, near `+0.01·n` / far `−0.05·n`)
+
+Invariants (do not regress):
+
+- `FACES`/`VERTICES` planarity and index consistency — non-planar edits cull triangles (holes) and swallow labels
+- `FACE_BASES` length = `FACE_TO_NUMBER.length` = 12
+- Two-digit labels fit the 256px canvas
+- Opposite faces sum to 13

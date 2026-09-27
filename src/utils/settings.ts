@@ -1,12 +1,6 @@
 import type { DiceSides } from './rollDice';
 
-export type DiceColor =
-  | 'red'
-  | 'green'
-  | 'white'
-  | 'black'
-  | 'blue'
-  | 'yellow';
+export type DiceColor = 'red' | 'green' | 'white' | 'black' | 'blue' | 'yellow';
 
 export type Settings = {
   sides: DiceSides;
@@ -60,7 +54,7 @@ export const COLOR_PALETTES: Record<DiceColor, ColorPalette> = {
   },
 };
 
-const SIDES_WHITELIST: readonly number[] = [6, 8, 10];
+const SIDES_WHITELIST: readonly number[] = [6, 8, 10, 12];
 const COLOR_WHITELIST: readonly DiceColor[] = [
   'red',
   'green',
@@ -80,6 +74,7 @@ const SIDES_OPACITY: Record<DiceSides, number> = {
   6: 0.85,
   8: 0.85,
   10: 0.9,
+  12: 0.85,
 };
 
 export const resolveOpacity = (

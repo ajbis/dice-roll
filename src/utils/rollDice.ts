@@ -1,13 +1,15 @@
-export type DiceSides = 6 | 8 | 10;
+export type DiceSides = 6 | 8 | 10 | 12;
 export type SixSidedValue = 1 | 2 | 3 | 4 | 5 | 6;
 export type EightSidedValue = SixSidedValue | 7 | 8;
 export type TenSidedValue = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+export type TwelveSidedValue = TenSidedValue | 11 | 12;
 
 export function fetchDiceRoll(sides: 6): Promise<SixSidedValue>;
 export function fetchDiceRoll(sides: 8): Promise<EightSidedValue>;
 export function fetchDiceRoll(sides: 10): Promise<TenSidedValue>;
-export function fetchDiceRoll(sides: DiceSides): Promise<TenSidedValue> {
+export function fetchDiceRoll(sides: 12): Promise<TwelveSidedValue>;
+export function fetchDiceRoll(sides: DiceSides): Promise<TwelveSidedValue> {
   const randomBytes = new Uint32Array(1);
   crypto.getRandomValues(randomBytes);
-  return Promise.resolve(((randomBytes[0] % sides) + 1) as TenSidedValue);
+  return Promise.resolve(((randomBytes[0] % sides) + 1) as TwelveSidedValue);
 }

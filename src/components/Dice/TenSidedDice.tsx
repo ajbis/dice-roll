@@ -99,9 +99,7 @@ const FACES: readonly (readonly number[])[] = [
   [5, 6, 7, 8, 9],
 ];
 
-const FACE_TO_NUMBER: readonly FaceValue[] = [
-  1, 3, 5, 7, 9, 8, 6, 4, 2, 10,
-];
+const FACE_TO_NUMBER: readonly FaceValue[] = [1, 3, 5, 7, 9, 8, 6, 4, 2, 10];
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
@@ -130,9 +128,7 @@ const computeFaceCenter = (verts: readonly [number, number, number][]) => {
 };
 
 const createFaceBasis = (faceIndex: number): FaceBasis => {
-  const faceVerts = FACES[faceIndex].map(
-    (i) => VERTICES[i],
-  );
+  const faceVerts = FACES[faceIndex].map((i) => VERTICES[i]);
   const center = computeFaceCenter(faceVerts);
   const normal = computeFaceNormal(faceVerts, center);
   const referenceUp =
@@ -156,9 +152,18 @@ const FACE_BASES = Array.from({ length: FACE_TO_NUMBER.length }, (_, i) =>
   createFaceBasis(i),
 );
 
-const targetOrientationForFace = (face: FaceBasis) => {
+const uprightOrientationForFace = (face: FaceBasis) => {
   const cameraNormal = new THREE.Vector3(0, 0, 1);
-  return new THREE.Quaternion().setFromUnitVectors(face.normal, cameraNormal);
+  const target = new THREE.Quaternion().setFromUnitVectors(
+    face.normal,
+    cameraNormal,
+  );
+  const up = face.up.clone().applyQuaternion(target);
+  const twist = new THREE.Quaternion().setFromAxisAngle(
+    new THREE.Vector3(0, 0, 1),
+    Math.atan2(up.x, up.y),
+  );
+  return twist.multiply(target);
 };
 
 const FAR_LABEL_COLOR = '#ffffff';
@@ -308,7 +313,7 @@ export default function TenSidedDice({
     try {
       const value = await fetchDiceRoll(10);
       const faceIndex = FACE_TO_NUMBER.indexOf(value);
-      const targetQuaternion = targetOrientationForFace(FACE_BASES[faceIndex]);
+      const targetQuaternion = uprightOrientationForFace(FACE_BASES[faceIndex]);
       const from = rotationRef.current;
       const spun = planRoll(from, targetQuaternion, SPIN_TURNS);
       await animateTo(spun, SPIN_MS);
@@ -430,8 +435,14 @@ export default function TenSidedDice({
       }
     }
 
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-    geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+    geometry.setAttribute(
+      'position',
+      new THREE.Float32BufferAttribute(vertices, 3),
+    );
+    geometry.setAttribute(
+      'normal',
+      new THREE.Float32BufferAttribute(normals, 3),
+    );
 
     const palette = COLOR_PALETTES[color];
     const opacity = resolveOpacity(10, translucent);
@@ -459,9 +470,7 @@ export default function TenSidedDice({
         const value = FACE_TO_NUMBER[index];
         const label = createLabel(value, palette.label);
         if (!label) return;
-        const center = computeFaceCenter(
-          FACES[index].map((i) => VERTICES[i]),
-        );
+        const center = computeFaceCenter(FACES[index].map((i) => VERTICES[i]));
         label.position.copy(center);
         label.position.addScaledVector(face.normal, 0.01);
         label.quaternion.copy(face.orientation);

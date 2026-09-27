@@ -7,9 +7,9 @@ import {
   resolveOpacity,
   type DiceColor,
 } from '../../utils/settings';
-import './EightSidedDice.scss';
+import './TwelveSidedDice.scss';
 
-type FaceValue = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+type FaceValue = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
 
 type Rotation = {
   x: number;
@@ -39,25 +39,82 @@ const SPIN_MS = 1500;
 const SETTLE_MS = 750;
 const SNAP_BACK_MS = 260;
 const degrees = Math.PI / 180;
-const FACE_CENTER = 1.08;
-const LABEL_SIZE = 0.864;
+const LABEL_SIZE = 1.0;
+
+// Regular dodecahedron: 20 vertices on a sphere of radius 1.7
+// (phi construction scaled by 1.7 / sqrt(3)); 12 planar pentagon faces.
+const VERTICES: readonly [number, number, number][] = [
+  [0.981495, 0.981495, 0.981495],
+  [0.981495, 0.981495, -0.981495],
+  [0.981495, -0.981495, 0.981495],
+  [0.981495, -0.981495, -0.981495],
+  [-0.981495, 0.981495, 0.981495],
+  [-0.981495, 0.981495, -0.981495],
+  [-0.981495, -0.981495, 0.981495],
+  [-0.981495, -0.981495, -0.981495],
+  [0.0, 0.606598, 1.588093],
+  [0.0, 0.606598, -1.588093],
+  [0.0, -0.606598, 1.588093],
+  [0.0, -0.606598, -1.588093],
+  [0.606598, 1.588093, 0.0],
+  [0.606598, -1.588093, 0.0],
+  [-0.606598, 1.588093, 0.0],
+  [-0.606598, -1.588093, 0.0],
+  [1.588093, 0.0, 0.606598],
+  [1.588093, 0.0, -0.606598],
+  [-1.588093, 0.0, 0.606598],
+  [-1.588093, 0.0, -0.606598],
+];
+
+const FACES: readonly (readonly number[])[] = [
+  [14, 12, 1, 9, 5],
+  [4, 8, 0, 12, 14],
+  [1, 12, 0, 16, 17],
+  [19, 18, 4, 14, 5],
+  [7, 19, 5, 9, 11],
+  [11, 9, 1, 17, 3],
+  [2, 16, 0, 8, 10],
+  [10, 8, 4, 18, 6],
+  [17, 16, 2, 13, 3],
+  [7, 15, 6, 18, 19],
+  [7, 11, 3, 13, 15],
+  [15, 13, 2, 10, 6],
+];
+
+const FACE_TO_NUMBER: readonly FaceValue[] = [
+  1, 2, 3, 4, 5, 6, 8, 7, 9, 10, 11, 12,
+];
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
 
-const FACE_NORMALS = [
-  [1, 1, 1],
-  [-1, 1, 1],
-  [-1, 1, -1],
-  [1, 1, -1],
-  [1, -1, 1],
-  [-1, -1, 1],
-  [-1, -1, -1],
-  [1, -1, -1],
-] as const;
+const computeFaceNormal = (
+  verts: readonly [number, number, number][],
+  center: THREE.Vector3,
+) => {
+  const [a, b, c] = verts;
+  const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]] as const;
+  const ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]] as const;
+  const nx = ab[1] * ac[2] - ab[2] * ac[1];
+  const ny = ab[2] * ac[0] - ab[0] * ac[2];
+  const nz = ab[0] * ac[1] - ab[1] * ac[0];
+  const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+  const normal = new THREE.Vector3(nx / len, ny / len, nz / len);
+  if (normal.dot(center) < 0) normal.negate();
+  return normal;
+};
 
-const createFaceBasis = (direction: readonly [number, number, number]) => {
-  const normal = new THREE.Vector3(...direction).normalize();
+const computeFaceCenter = (verts: readonly [number, number, number][]) => {
+  const cx = verts.reduce((s, v) => s + v[0], 0) / verts.length;
+  const cy = verts.reduce((s, v) => s + v[1], 0) / verts.length;
+  const cz = verts.reduce((s, v) => s + v[2], 0) / verts.length;
+  return new THREE.Vector3(cx, cy, cz);
+};
+
+const createFaceBasis = (faceIndex: number): FaceBasis => {
+  const faceVerts = FACES[faceIndex].map((i) => VERTICES[i]);
+  const center = computeFaceCenter(faceVerts);
+  const normal = computeFaceNormal(faceVerts, center);
   const referenceUp =
     Math.abs(normal.y) > 0.9
       ? new THREE.Vector3(0, 0, 1)
@@ -68,15 +125,16 @@ const createFaceBasis = (direction: readonly [number, number, number]) => {
     .normalize();
   const right = new THREE.Vector3().crossVectors(up, normal).normalize();
   const basis = new THREE.Matrix4().makeBasis(right, up, normal);
-
   return {
     normal,
     up,
     orientation: new THREE.Quaternion().setFromRotationMatrix(basis),
-  } satisfies FaceBasis;
+  };
 };
 
-const FACE_BASES = FACE_NORMALS.map(createFaceBasis);
+const FACE_BASES = Array.from({ length: FACE_TO_NUMBER.length }, (_, i) =>
+  createFaceBasis(i),
+);
 
 const uprightOrientationForFace = (face: FaceBasis) => {
   const cameraNormal = new THREE.Vector3(0, 0, 1);
@@ -102,12 +160,10 @@ const createLabel = (value: FaceValue, labelColor: string) => {
 
   if (!context) return null;
 
-  context.font = '700 200px dice-font, system-ui, sans-serif';
+  context.font = '700 160px dice-font, system-ui, sans-serif';
   context.textAlign = 'center';
   context.textBaseline = 'middle';
   context.fillStyle = labelColor;
-  context.shadowColor = 'rgba(0, 0, 0, 0.35)';
-  context.shadowBlur = 6;
   context.fillText(String(value), 128, 136);
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -134,15 +190,15 @@ const rotationFromQuaternion = (quaternion: THREE.Quaternion): Rotation => {
   };
 };
 
-type EightSidedDiceProps = {
+type TwelveSidedDiceProps = {
   color?: DiceColor;
   translucent?: boolean;
 };
 
-export default function EightSidedDice({
+export default function TwelveSidedDice({
   color = 'red',
   translucent = true,
-}: EightSidedDiceProps) {
+}: TwelveSidedDiceProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const meshRef = useRef<THREE.Mesh | null>(null);
   const renderFrameRef = useRef<number | null>(null);
@@ -239,8 +295,9 @@ export default function EightSidedDice({
     setError(null);
 
     try {
-      const value = await fetchDiceRoll(8);
-      const targetQuaternion = uprightOrientationForFace(FACE_BASES[value - 1]);
+      const value = await fetchDiceRoll(12);
+      const faceIndex = FACE_TO_NUMBER.indexOf(value);
+      const targetQuaternion = uprightOrientationForFace(FACE_BASES[faceIndex]);
       const from = rotationRef.current;
       const spun = planRoll(from, targetQuaternion, SPIN_TURNS);
       await animateTo(spun, SPIN_MS);
@@ -334,16 +391,53 @@ export default function EightSidedDice({
     renderer.setClearColor(0x000000, 0);
     mount.appendChild(renderer.domElement);
 
+    const geometry = new THREE.BufferGeometry();
+    const vertices: number[] = [];
+    const normals: number[] = [];
+
+    for (const face of FACES) {
+      const faceVerts = face.map((i) => VERTICES[i]);
+      const center = computeFaceCenter(faceVerts);
+      const normal = computeFaceNormal(faceVerts, center);
+      const nx = normal.x;
+      const ny = normal.y;
+      const nz = normal.z;
+
+      const [a, b, c] = faceVerts;
+      const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]] as const;
+      const ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]] as const;
+      const geoNx = ab[1] * ac[2] - ab[2] * ac[1];
+      const geoNy = ab[2] * ac[0] - ab[0] * ac[2];
+      const geoNz = ab[0] * ac[1] - ab[1] * ac[0];
+      const outward =
+        geoNx * center.x + geoNy * center.y + geoNz * center.z >= 0;
+      const ordered = outward ? faceVerts : [...faceVerts].reverse();
+
+      for (let i = 1; i < ordered.length - 1; i++) {
+        vertices.push(...ordered[0], ...ordered[i], ...ordered[i + 1]);
+        normals.push(nx, ny, nz, nx, ny, nz, nx, ny, nz);
+      }
+    }
+
+    geometry.setAttribute(
+      'position',
+      new THREE.Float32BufferAttribute(vertices, 3),
+    );
+    geometry.setAttribute(
+      'normal',
+      new THREE.Float32BufferAttribute(normals, 3),
+    );
+
     const palette = COLOR_PALETTES[color];
-    const opacity = resolveOpacity(8, translucent);
+    const opacity = resolveOpacity(12, translucent);
 
     const mesh = new THREE.Mesh(
-      new THREE.OctahedronGeometry(1.7, 0),
+      geometry,
       new THREE.MeshStandardMaterial({
         color: palette.hex,
-        roughness: 0.46,
-        metalness: 0.08,
-        flatShading: true,
+        roughness: 0.4,
+        metalness: 0.0,
+        flatShading: false,
         transparent: translucent,
         opacity,
         depthWrite: !translucent,
@@ -357,23 +451,26 @@ export default function EightSidedDice({
 
     const addLabels = () => {
       FACE_BASES.forEach((face, index) => {
-        const value = (index + 1) as FaceValue;
+        const value = FACE_TO_NUMBER[index];
         const label = createLabel(value, palette.label);
         if (!label) return;
-        label.position.copy(face.normal).multiplyScalar(FACE_CENTER);
+        const center = computeFaceCenter(FACES[index].map((i) => VERTICES[i]));
+        label.position.copy(center);
+        label.position.addScaledVector(face.normal, 0.01);
         label.quaternion.copy(face.orientation);
         mesh.add(label);
 
         const far = createLabel(value, FAR_LABEL_COLOR);
         if (!far) return;
         far.renderOrder = -1;
-        far.position.copy(face.normal).multiplyScalar(FACE_CENTER - 0.2);
+        far.position.copy(center);
+        far.position.addScaledVector(face.normal, -0.05);
         far.quaternion.copy(face.orientation).multiply(labelFlip);
         mesh.add(far);
       });
     };
 
-    void document.fonts.load('700 200px dice-font').then(addLabels);
+    void document.fonts.load('700 160px dice-font').then(addLabels);
 
     scene.add(mesh);
     scene.add(new THREE.AmbientLight(0xffffff, 1.0));
@@ -407,7 +504,7 @@ export default function EightSidedDice({
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
-      mesh.geometry.dispose();
+      geometry.dispose();
       (mesh.material as THREE.Material).dispose();
       mesh.children.forEach((child) => {
         const label = child as THREE.Mesh<
@@ -426,7 +523,7 @@ export default function EightSidedDice({
 
   return (
     <div
-      className={`stage stage--eight-sided${isDragging ? ' is-dragging' : ''}`}
+      className={`stage stage--twelve-sided${isDragging ? ' is-dragging' : ''}`}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
@@ -438,7 +535,7 @@ export default function EightSidedDice({
           ? 'Rolling...'
           : error
             ? error
-            : result
+            : result !== null
               ? `You rolled ${result}. Drag again to roll.`
               : 'Drag from the centre. Let go past halfway to roll.'}
       </p>

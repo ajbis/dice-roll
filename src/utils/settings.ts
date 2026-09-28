@@ -54,7 +54,7 @@ export const COLOR_PALETTES: Record<DiceColor, ColorPalette> = {
   },
 };
 
-const SIDES_WHITELIST: readonly number[] = [6, 8, 10, 12];
+const SIDES_WHITELIST: readonly number[] = [6, 8, 10, 12, 20];
 const COLOR_WHITELIST: readonly DiceColor[] = [
   'red',
   'green',
@@ -70,17 +70,10 @@ export const DEFAULT_SETTINGS: Settings = {
   translucent: true,
 };
 
-const SIDES_OPACITY: Record<DiceSides, number> = {
-  6: 0.85,
-  8: 0.85,
-  10: 0.9,
-  12: 0.85,
-};
+const TRANSLUCENT_OPACITY = 0.87;
 
-export const resolveOpacity = (
-  sides: DiceSides,
-  translucent: boolean,
-): number => (translucent ? SIDES_OPACITY[sides] : 1);
+export const resolveOpacity = (translucent: boolean): number =>
+  translucent ? TRANSLUCENT_OPACITY : 1;
 
 export function getSettings(): Settings {
   const params = new URLSearchParams(window.location.search);

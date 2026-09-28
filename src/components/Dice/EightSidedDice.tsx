@@ -335,7 +335,7 @@ export default function EightSidedDice({
     mount.appendChild(renderer.domElement);
 
     const palette = COLOR_PALETTES[color];
-    const opacity = resolveOpacity(8, translucent);
+    const opacity = resolveOpacity(translucent);
 
     const mesh = new THREE.Mesh(
       new THREE.OctahedronGeometry(1.7, 0),

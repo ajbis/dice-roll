@@ -128,7 +128,7 @@ export default function SixSidedDice({
   rotationRef.current = rotation;
 
   const palette = COLOR_PALETTES[color];
-  const opacity = resolveOpacity(6, translucent);
+  const opacity = resolveOpacity(translucent);
   const faceTop = `rgb(${palette.cssTop.join(' ')} / ${opacity})`;
   const faceBottom = `rgb(${palette.cssBottom.join(' ')} / ${opacity})`;
 

@@ -429,7 +429,7 @@ export default function TwelveSidedDice({
     );
 
     const palette = COLOR_PALETTES[color];
-    const opacity = resolveOpacity(12, translucent);
+    const opacity = resolveOpacity(translucent);
 
     const mesh = new THREE.Mesh(
       geometry,

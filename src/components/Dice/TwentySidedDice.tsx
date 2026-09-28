@@ -7,9 +7,29 @@ import {
   resolveOpacity,
   type DiceColor,
 } from '../../utils/settings';
-import './TenSidedDice.scss';
+import './TwentySidedDice.scss';
 
-type FaceValue = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+type FaceValue =
+  | 1
+  | 2
+  | 3
+  | 4
+  | 5
+  | 6
+  | 7
+  | 8
+  | 9
+  | 10
+  | 11
+  | 12
+  | 13
+  | 14
+  | 15
+  | 16
+  | 17
+  | 18
+  | 19
+  | 20;
 
 type Rotation = {
   x: number;
@@ -39,67 +59,51 @@ const SPIN_MS = 1500;
 const SETTLE_MS = 750;
 const SNAP_BACK_MS = 260;
 const degrees = Math.PI / 180;
-const LABEL_SIZE = 0.77;
+const LABEL_SIZE = 0.9;
 
-const RADIUS = 2.2;
-const SQUASH = 0.85;
-const POLE_Y = RADIUS * 0.9 * SQUASH;
-const RING_RADIUS = RADIUS * 0.65;
-const RING_Y = POLE_Y * 0.105573;
-const CUT_Y = POLE_Y * 0.8;
-const CUT_T = (POLE_Y - CUT_Y) / (POLE_Y - RING_Y);
-
+// Regular icosahedron: 12 vertices on a sphere of radius 1.7
+// (phi construction scaled by 1.7 / sqrt(1 + phi^2)); 20 triangular faces.
 const VERTICES: readonly [number, number, number][] = [
-  ...([0, 1, 2, 3, 4] as const).map(
-    (i) =>
-      [
-        CUT_T * RING_RADIUS * Math.cos((i * 2 * Math.PI) / 5),
-        CUT_Y,
-        CUT_T * RING_RADIUS * Math.sin((i * 2 * Math.PI) / 5),
-      ] as [number, number, number],
-  ),
-  ...([0, 1, 2, 3, 4] as const).map(
-    (i) =>
-      [
-        CUT_T * RING_RADIUS * Math.cos(((i + 0.5) * 2 * Math.PI) / 5),
-        -CUT_Y,
-        CUT_T * RING_RADIUS * Math.sin(((i + 0.5) * 2 * Math.PI) / 5),
-      ] as [number, number, number],
-  ),
-  ...([0, 1, 2, 3, 4] as const).map(
-    (i) =>
-      [
-        RING_RADIUS * Math.cos((i * 2 * Math.PI) / 5),
-        RING_Y,
-        RING_RADIUS * Math.sin((i * 2 * Math.PI) / 5),
-      ] as [number, number, number],
-  ),
-  ...([0, 1, 2, 3, 4] as const).map(
-    (i) =>
-      [
-        RING_RADIUS * Math.cos(((i + 0.5) * 2 * Math.PI) / 5),
-        -RING_Y,
-        RING_RADIUS * Math.sin(((i + 0.5) * 2 * Math.PI) / 5),
-      ] as [number, number, number],
-  ),
+  [0.0, 0.893743, 1.446106],
+  [0.0, 0.893743, -1.446106],
+  [0.0, -0.893743, 1.446106],
+  [0.0, -0.893743, -1.446106],
+  [0.893743, 1.446106, 0.0],
+  [0.893743, -1.446106, 0.0],
+  [-0.893743, 1.446106, 0.0],
+  [-0.893743, -1.446106, 0.0],
+  [1.446106, 0.0, 0.893743],
+  [1.446106, 0.0, -0.893743],
+  [-1.446106, 0.0, 0.893743],
+  [-1.446106, 0.0, -0.893743],
 ];
 
 const FACES: readonly (readonly number[])[] = [
-  [0, 10, 15, 11, 1],
-  [1, 11, 16, 12, 2],
-  [2, 12, 17, 13, 3],
-  [3, 13, 18, 14, 4],
-  [4, 14, 19, 10, 0],
-  [5, 6, 16, 11, 15],
-  [6, 7, 17, 12, 16],
-  [7, 8, 18, 13, 17],
-  [8, 9, 19, 14, 18],
-  [9, 5, 15, 10, 19],
-  [0, 1, 2, 3, 4],
-  [5, 6, 7, 8, 9],
+  [6, 4, 1],
+  [0, 4, 6],
+  [11, 6, 1],
+  [1, 4, 9],
+  [8, 4, 0],
+  [0, 6, 10],
+  [4, 8, 9],
+  [11, 10, 6],
+  [1, 3, 11],
+  [9, 3, 1],
+  [0, 2, 8],
+  [10, 2, 0],
+  [9, 8, 5],
+  [7, 10, 11],
+  [3, 7, 11],
+  [9, 5, 3],
+  [2, 5, 8],
+  [10, 7, 2],
+  [3, 5, 7],
+  [7, 5, 2],
 ];
 
-const FACE_TO_NUMBER: readonly FaceValue[] = [1, 3, 5, 7, 9, 8, 6, 4, 2, 10];
+const FACE_TO_NUMBER: readonly FaceValue[] = [
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 11, 13, 14, 16, 15, 18, 17, 19, 20,
+];
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
@@ -176,11 +180,11 @@ const createLabel = (value: FaceValue, labelColor: string) => {
 
   if (!context) return null;
 
-  context.font = '700 180px dice-font, system-ui, sans-serif';
+  context.font = '700 160px dice-font, system-ui, sans-serif';
   context.textAlign = 'center';
   context.textBaseline = 'middle';
   context.fillStyle = labelColor;
-  context.fillText(String(value === 10 ? 0 : value), 128, 136);
+  context.fillText(String(value), 128, 136);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -206,15 +210,15 @@ const rotationFromQuaternion = (quaternion: THREE.Quaternion): Rotation => {
   };
 };
 
-type TenSidedDiceProps = {
+type TwentySidedDiceProps = {
   color?: DiceColor;
   translucent?: boolean;
 };
 
-export default function TenSidedDice({
+export default function TwentySidedDice({
   color = 'red',
   translucent = true,
-}: TenSidedDiceProps) {
+}: TwentySidedDiceProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const meshRef = useRef<THREE.Mesh | null>(null);
   const renderFrameRef = useRef<number | null>(null);
@@ -311,7 +315,7 @@ export default function TenSidedDice({
     setError(null);
 
     try {
-      const value = await fetchDiceRoll(10);
+      const value = await fetchDiceRoll(20);
       const faceIndex = FACE_TO_NUMBER.indexOf(value);
       const targetQuaternion = uprightOrientationForFace(FACE_BASES[faceIndex]);
       const from = rotationRef.current;
@@ -486,7 +490,7 @@ export default function TenSidedDice({
       });
     };
 
-    void document.fonts.load('700 180px dice-font').then(addLabels);
+    void document.fonts.load('700 160px dice-font').then(addLabels);
 
     scene.add(mesh);
     scene.add(new THREE.AmbientLight(0xffffff, 1.0));
@@ -539,7 +543,7 @@ export default function TenSidedDice({
 
   return (
     <div
-      className={`stage stage--ten-sided${isDragging ? ' is-dragging' : ''}`}
+      className={`stage stage--twenty-sided${isDragging ? ' is-dragging' : ''}`}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}

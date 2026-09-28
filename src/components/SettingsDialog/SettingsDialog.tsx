@@ -10,7 +10,7 @@ import './SettingsDialog.scss';
 const FOCUSABLE_SELECTOR =
   'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
-const SIDES_OPTIONS: readonly DiceSides[] = [6, 8, 10, 12];
+const SIDES_OPTIONS: readonly DiceSides[] = [6, 8, 10, 12, 20];
 const COLOR_OPTIONS: readonly DiceColor[] = [
   'red',
   'yellow',

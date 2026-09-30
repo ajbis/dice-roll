@@ -54,7 +54,7 @@ export const COLOR_PALETTES: Record<DiceColor, ColorPalette> = {
   },
 };
 
-const SIDES_WHITELIST: readonly number[] = [6, 8, 10, 12, 20];
+const SIDES_WHITELIST: readonly number[] = [4, 6, 8, 10, 12, 20];
 const COLOR_WHITELIST: readonly DiceColor[] = [
   'red',
   'green',

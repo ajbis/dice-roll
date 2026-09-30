@@ -478,6 +478,7 @@ export default function TwentySidedDice({
         label.position.copy(center);
         label.position.addScaledVector(face.normal, 0.01);
         label.quaternion.copy(face.orientation);
+        label.renderOrder = 1;
         mesh.add(label);
 
         const far = createLabel(value, FAR_LABEL_COLOR);

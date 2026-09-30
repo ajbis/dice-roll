@@ -1,11 +1,12 @@
 import SixSidedDice from './SixSidedDice';
+import FourSidedDice from './FourSidedDice';
 import EightSidedDice from './EightSidedDice';
 import TenSidedDice from './TenSidedDice';
 import TwelveSidedDice from './TwelveSidedDice';
 import TwentySidedDice from './TwentySidedDice';
 import type { DiceColor } from '../../utils/settings';
 
-export type DiceSides = 6 | 8 | 10 | 12 | 20;
+export type DiceSides = 4 | 6 | 8 | 10 | 12 | 20;
 
 type DiceProps = {
   sides?: DiceSides;
@@ -19,6 +20,8 @@ export default function Dice({
   translucent = true,
 }: DiceProps) {
   switch (sides) {
+    case 4:
+      return <FourSidedDice color={color} translucent={translucent} />;
     case 6:
       return <SixSidedDice color={color} translucent={translucent} />;
     case 8:

@@ -7,9 +7,9 @@ import {
   resolveOpacity,
   type DiceColor,
 } from '../../utils/settings';
-import './TwelveSidedDice.scss';
+import './FourSidedDice.scss';
 
-type FaceValue = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
+type FaceValue = 1 | 2 | 3 | 4;
 
 type Rotation = {
   x: number;
@@ -26,12 +26,6 @@ type DragState = {
   ny: number;
 };
 
-type FaceBasis = {
-  normal: THREE.Vector3;
-  up: THREE.Vector3;
-  orientation: THREE.Quaternion;
-};
-
 const MAX_TILT_DEG = 65;
 const ROLL_THRESHOLD = 0.5;
 const SPIN_TURNS = 10;
@@ -39,51 +33,60 @@ const SPIN_MS = 1500;
 const SETTLE_MS = 750;
 const SNAP_BACK_MS = 260;
 const degrees = Math.PI / 180;
-const LABEL_SIZE = 1.0;
+const LABEL_SIZE = 0.8;
 
-// Regular dodecahedron: 20 vertices on a sphere of radius 1.7
-// (phi construction scaled by 1.7 / sqrt(3)); 12 planar pentagon faces.
+// Regular tetrahedron: 4 vertices at (±s, ±s, ±s) with matching sign parity,
+// s = 1.7 / sqrt(3); 4 triangles. No opposite faces (no sum convention).
 const VERTICES: readonly [number, number, number][] = [
   [0.981495, 0.981495, 0.981495],
-  [0.981495, 0.981495, -0.981495],
-  [0.981495, -0.981495, 0.981495],
   [0.981495, -0.981495, -0.981495],
-  [-0.981495, 0.981495, 0.981495],
   [-0.981495, 0.981495, -0.981495],
   [-0.981495, -0.981495, 0.981495],
-  [-0.981495, -0.981495, -0.981495],
-  [0.0, 0.606598, 1.588093],
-  [0.0, 0.606598, -1.588093],
-  [0.0, -0.606598, 1.588093],
-  [0.0, -0.606598, -1.588093],
-  [0.606598, 1.588093, 0.0],
-  [0.606598, -1.588093, 0.0],
-  [-0.606598, 1.588093, 0.0],
-  [-0.606598, -1.588093, 0.0],
-  [1.588093, 0.0, 0.606598],
-  [1.588093, 0.0, -0.606598],
-  [-1.588093, 0.0, 0.606598],
-  [-1.588093, 0.0, -0.606598],
 ];
 
 const FACES: readonly (readonly number[])[] = [
-  [14, 12, 1, 9, 5],
-  [4, 8, 0, 12, 14],
-  [1, 12, 0, 16, 17],
-  [19, 18, 4, 14, 5],
-  [7, 19, 5, 9, 11],
-  [11, 9, 1, 17, 3],
-  [2, 16, 0, 8, 10],
-  [10, 8, 4, 18, 6],
-  [17, 16, 2, 13, 3],
-  [7, 15, 6, 18, 19],
-  [7, 11, 3, 13, 15],
-  [15, 13, 2, 10, 6],
+  [1, 3, 2],
+  [0, 2, 3],
+  [0, 3, 1],
+  [0, 1, 2],
 ];
 
-const FACE_TO_NUMBER: readonly FaceValue[] = [
-  1, 2, 3, 4, 5, 6, 8, 7, 9, 10, 11, 12,
+const FACE_TO_NUMBER: readonly FaceValue[] = [1, 2, 3, 4];
+
+// Bottom-read label centres: face-major, edge order (v0,v1),(v1,v2),(v2,v0),
+// on the centre line at u = 0.625 (fraction centre→edge — pulled in from the
+// edges for clearance). Result labels (edge shared with the face's own resting
+// face) settle at world (0, -0.283, 0.701) — bottom-centre, "sitting on the
+// table".
+const LABEL_POS: readonly (readonly [number, number, number])[] = [
+  [-0.122687, -0.736122, -0.122687],
+  [-0.736122, -0.122687, -0.122687],
+  [-0.122687, -0.122687, -0.736122],
+  [-0.122687, 0.736122, 0.122687],
+  [-0.736122, 0.122687, 0.122687],
+  [-0.122687, 0.122687, 0.736122],
+  [0.122687, -0.122687, 0.736122],
+  [0.122687, -0.736122, 0.122687],
+  [0.736122, -0.122687, 0.122687],
+  [0.736122, 0.122687, -0.122687],
+  [0.122687, 0.122687, -0.736122],
+  [0.122687, 0.736122, -0.122687],
 ];
+
+// In-plane rotation per label (degrees about its face normal):
+// - selected (result) positions — edge shared with the face's rest face,
+//   table indices 2, 4, 6, 9 — keep 0 so the result reads upright at settle;
+// - non-selected positions get 180: the digit's top points outward along the
+//   radius from the face centre to its edge midpoint, so the numbers radiate
+//   out from the centre of the pane instead of all sitting upright.
+const LABEL_BETA_DEG: readonly number[] = [
+  180, 180, 0, 180, 0, 180, 0, 180, 180, 0, 180, 180,
+];
+
+// Initial (pre-roll) pose, Euler XYZ degrees: a vertex ("point") faces the
+// viewer dead centre (≈3° off the camera axis), tilted like a held drag of
+// the bottom-read rest pose — not identity.
+const INITIAL_ROTATION: Rotation = { x: -177.2356, y: 55.25, z: 45 };
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
@@ -111,43 +114,42 @@ const computeFaceCenter = (verts: readonly [number, number, number][]) => {
   return new THREE.Vector3(cx, cy, cz);
 };
 
-const createFaceBasis = (faceIndex: number): FaceBasis => {
-  const faceVerts = FACES[faceIndex].map((i) => VERTICES[i]);
-  const center = computeFaceCenter(faceVerts);
-  const normal = computeFaceNormal(faceVerts, center);
-  const referenceUp =
-    Math.abs(normal.y) > 0.9
-      ? new THREE.Vector3(0, 0, 1)
-      : new THREE.Vector3(0, 1, 0);
-  const up = referenceUp
-    .clone()
-    .sub(normal.clone().multiplyScalar(referenceUp.dot(normal)))
-    .normalize();
-  const right = new THREE.Vector3().crossVectors(up, normal).normalize();
-  const basis = new THREE.Matrix4().makeBasis(right, up, normal);
-  return {
-    normal,
-    up,
-    orientation: new THREE.Quaternion().setFromRotationMatrix(basis),
-  };
+const FACE_GEOM = FACES.map((face) => {
+  const verts = face.map((i) => VERTICES[i]);
+  const center = computeFaceCenter(verts);
+  return { normal: computeFaceNormal(verts, center), center };
+});
+
+// Value shown at a label position: the OTHER face sharing that edge (a face
+// never shows its own value; every value is printed exactly three times).
+const labelValue = (face: number, edge: number): FaceValue => {
+  const a = FACES[face][edge];
+  const b = FACES[face][(edge + 1) % 3];
+  for (let g = 0; g < FACES.length; g++) {
+    if (g !== face && FACES[g].includes(a) && FACES[g].includes(b)) {
+      return FACE_TO_NUMBER[g];
+    }
+  }
+  return FACE_TO_NUMBER[face];
 };
 
-const FACE_BASES = Array.from({ length: FACE_TO_NUMBER.length }, (_, i) =>
-  createFaceBasis(i),
-);
-
-const uprightOrientationForFace = (face: FaceBasis) => {
-  const cameraNormal = new THREE.Vector3(0, 0, 1);
+// Settle for a rolled value: the resting face points straight DOWN (hidden,
+// apex up — bottom-read "sits on the table"), with the displayed front face
+// (faceIndex + 1) rotated to face the camera.
+const restingOrientationForFace = (faceIndex: number) => {
+  const { normal } = FACE_GEOM[faceIndex];
   const target = new THREE.Quaternion().setFromUnitVectors(
-    face.normal,
-    cameraNormal,
+    normal,
+    new THREE.Vector3(0, -1, 0),
   );
-  const up = face.up.clone().applyQuaternion(target);
-  const twist = new THREE.Quaternion().setFromAxisAngle(
-    new THREE.Vector3(0, 0, 1),
-    Math.atan2(up.x, up.y),
+  const frontIndex = (faceIndex + 1) % FACES.length;
+  const rotated = FACE_GEOM[frontIndex].normal.clone().applyQuaternion(target);
+  const azimuth = Math.atan2(rotated.x, rotated.z);
+  const spin = new THREE.Quaternion().setFromAxisAngle(
+    new THREE.Vector3(0, 1, 0),
+    -azimuth,
   );
-  return twist.multiply(target);
+  return spin.multiply(target);
 };
 
 const FAR_LABEL_COLOR = '#ffffff';
@@ -190,22 +192,22 @@ const rotationFromQuaternion = (quaternion: THREE.Quaternion): Rotation => {
   };
 };
 
-type TwelveSidedDiceProps = {
+type FourSidedDiceProps = {
   color?: DiceColor;
   translucent?: boolean;
 };
 
-export default function TwelveSidedDice({
+export default function FourSidedDice({
   color = 'red',
   translucent = true,
-}: TwelveSidedDiceProps) {
+}: FourSidedDiceProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const meshRef = useRef<THREE.Mesh | null>(null);
   const renderFrameRef = useRef<number | null>(null);
   const dragFrameRef = useRef<number | null>(null);
   const animationFrameRef = useRef<number | null>(null);
-  const rotationRef = useRef<Rotation>({ x: 0, y: 0, z: 0 });
-  const restRef = useRef<Rotation>({ x: 0, y: 0, z: 0 });
+  const rotationRef = useRef<Rotation>({ ...INITIAL_ROTATION });
+  const restRef = useRef<Rotation>({ ...INITIAL_ROTATION });
   const dragRef = useRef<DragState | null>(null);
   const isRollingRef = useRef(false);
 
@@ -295,9 +297,9 @@ export default function TwelveSidedDice({
     setError(null);
 
     try {
-      const value = await fetchDiceRoll(12);
+      const value = await fetchDiceRoll(4);
       const faceIndex = FACE_TO_NUMBER.indexOf(value);
-      const targetQuaternion = uprightOrientationForFace(FACE_BASES[faceIndex]);
+      const targetQuaternion = restingOrientationForFace(faceIndex);
       const from = rotationRef.current;
       const spun = planRoll(from, targetQuaternion, SPIN_TURNS);
       await animateTo(spun, SPIN_MS);
@@ -443,6 +445,12 @@ export default function TwelveSidedDice({
         depthWrite: !translucent,
       }),
     );
+    // Start (and remount on color/opacity change) from the current pose.
+    mesh.rotation.set(
+      rotationRef.current.x * degrees,
+      rotationRef.current.y * degrees,
+      rotationRef.current.z * degrees,
+    );
 
     const labelFlip = new THREE.Quaternion().setFromAxisAngle(
       new THREE.Vector3(0, 1, 0),
@@ -450,24 +458,53 @@ export default function TwelveSidedDice({
     );
 
     const addLabels = () => {
-      FACE_BASES.forEach((face, index) => {
-        const value = FACE_TO_NUMBER[index];
-        const label = createLabel(value, palette.label);
-        if (!label) return;
-        const center = computeFaceCenter(FACES[index].map((i) => VERTICES[i]));
-        label.position.copy(center);
-        label.position.addScaledVector(face.normal, 0.01);
-        label.quaternion.copy(face.orientation);
-        label.renderOrder = 1;
-        mesh.add(label);
+      FACE_GEOM.forEach(({ normal, center }, faceIndex) => {
+        for (let edge = 0; edge < 3; edge++) {
+          const tableIndex = faceIndex * 3 + edge;
+          const value = labelValue(faceIndex, edge);
+          const a = FACES[faceIndex][edge];
+          const b = FACES[faceIndex][(edge + 1) % 3];
+          const mid = new THREE.Vector3()
+            .addVectors(
+              new THREE.Vector3(...VERTICES[a]),
+              new THREE.Vector3(...VERTICES[b]),
+            )
+            .multiplyScalar(0.5);
+          const up = center.clone().sub(mid).normalize();
+          const right = new THREE.Vector3().crossVectors(up, normal);
+          const orientation = new THREE.Quaternion().setFromRotationMatrix(
+            new THREE.Matrix4().makeBasis(right, up, normal),
+          );
+          const beta = new THREE.Quaternion().setFromAxisAngle(
+            new THREE.Vector3(0, 0, 1),
+            LABEL_BETA_DEG[tableIndex] * degrees,
+          );
+          const full = orientation.multiply(beta);
 
-        const far = createLabel(value, FAR_LABEL_COLOR);
-        if (!far) return;
-        far.renderOrder = -1;
-        far.position.copy(center);
-        far.position.addScaledVector(face.normal, -0.05);
-        far.quaternion.copy(face.orientation).multiply(labelFlip);
-        mesh.add(far);
+          const near = createLabel(value, palette.label);
+          if (near) {
+            // Drawn after the body (renderOrder 1): a near label whose world
+            // position sits behind the die centre would otherwise sort before
+            // the translucent body and be overdrawn to a 13% ghost at certain
+            // drag angles — numbers "disappearing" on non-front sides.
+            near.renderOrder = 1;
+            near.position
+              .copy(new THREE.Vector3(...LABEL_POS[tableIndex]))
+              .addScaledVector(normal, 0.01);
+            near.quaternion.copy(full);
+            mesh.add(near);
+          }
+
+          const far = createLabel(value, FAR_LABEL_COLOR);
+          if (far) {
+            far.renderOrder = -1;
+            far.position
+              .copy(new THREE.Vector3(...LABEL_POS[tableIndex]))
+              .addScaledVector(normal, -0.05);
+            far.quaternion.copy(full).multiply(labelFlip);
+            mesh.add(far);
+          }
+        }
       });
     };
 
@@ -524,7 +561,7 @@ export default function TwelveSidedDice({
 
   return (
     <div
-      className={`stage stage--twelve-sided${isDragging ? ' is-dragging' : ''}`}
+      className={`stage stage--four-sided${isDragging ? ' is-dragging' : ''}`}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}

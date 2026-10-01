@@ -91,10 +91,19 @@ const INITIAL_ROTATION: Rotation = { x: -177.2356, y: 55.25, z: 45 };
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
 
-const computeFaceNormal = (
-  verts: readonly [number, number, number][],
-  center: THREE.Vector3,
-) => {
+type FacePolygon = readonly (readonly [number, number, number])[];
+
+const lerp3 = (
+  from: readonly [number, number, number],
+  to: readonly [number, number, number],
+  t: number,
+): [number, number, number] => [
+  from[0] + (to[0] - from[0]) * t,
+  from[1] + (to[1] - from[1]) * t,
+  from[2] + (to[2] - from[2]) * t,
+];
+
+const computeFaceNormal = (verts: FacePolygon, center: THREE.Vector3) => {
   const [a, b, c] = verts;
   const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]] as const;
   const ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]] as const;
@@ -107,7 +116,7 @@ const computeFaceNormal = (
   return normal;
 };
 
-const computeFaceCenter = (verts: readonly [number, number, number][]) => {
+const computeFaceCenter = (verts: FacePolygon) => {
   const cx = verts.reduce((s, v) => s + v[0], 0) / verts.length;
   const cy = verts.reduce((s, v) => s + v[1], 0) / verts.length;
   const cz = verts.reduce((s, v) => s + v[2], 0) / verts.length;
@@ -119,6 +128,49 @@ const FACE_GEOM = FACES.map((face) => {
   const center = computeFaceCenter(verts);
   return { normal: computeFaceNormal(verts, center), center };
 });
+
+/* Corner chamfer — the D4 analogue of the D6 corner cuts: this far off each
+   vertex along its edges (0.07 world units, same camera + circumradius as
+   the D6, so the triangles read the same size on screen). Each triangle face
+   becomes a hexagon (two cut points per corner), each vertex a small flat
+   triangle. Winding and normals are auto-derived in the build loop below
+   (D10-style). Labels/roll targets stay on the original 4 face planes — the
+   cuts only remove corner slivers, and the face planes/centres are unchanged
+   (the hexagon is symmetric about the original triangle's centroid). */
+const CORNER_CUT = 0.07;
+
+const buildChamferedTetra = (cut: number): FacePolygon[] => {
+  const faces: FacePolygon[] = [];
+
+  for (const face of FACES) {
+    const hexagon: [number, number, number][] = [];
+    for (let i = 0; i < 3; i++) {
+      const a = VERTICES[face[i]];
+      const b = VERTICES[face[(i + 1) % 3]];
+      const edge = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+      const t = cut / edge;
+      hexagon.push(lerp3(a, b, t));
+      hexagon.push(lerp3(b, a, t));
+    }
+    faces.push(hexagon);
+  }
+
+  for (let v = 0; v < VERTICES.length; v++) {
+    const triangle: [number, number, number][] = [];
+    for (let n = 0; n < VERTICES.length; n++) {
+      if (n === v) continue;
+      const a = VERTICES[v];
+      const b = VERTICES[n];
+      const edge = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+      triangle.push(lerp3(a, b, cut / edge));
+    }
+    faces.push(triangle);
+  }
+
+  return faces;
+};
+
+const CHAMFER_FACES = buildChamferedTetra(CORNER_CUT);
 
 // Value shown at a label position: the OTHER face sharing that edge (a face
 // never shows its own value; every value is printed exactly three times).
@@ -397,8 +449,8 @@ export default function FourSidedDice({
     const vertices: number[] = [];
     const normals: number[] = [];
 
-    for (const face of FACES) {
-      const faceVerts = face.map((i) => VERTICES[i]);
+    for (const face of CHAMFER_FACES) {
+      const faceVerts = face;
       const center = computeFaceCenter(faceVerts);
       const normal = computeFaceNormal(faceVerts, center);
       const nx = normal.x;

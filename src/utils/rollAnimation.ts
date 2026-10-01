@@ -6,17 +6,10 @@ export type SpinRotation = {
   z: number;
 };
 
-export type PlanarRotation = {
-  x: number;
-  y: number;
-};
-
 const degrees = Math.PI / 180;
 const MIN_SPIN_TURNS = 3;
 const MAX_SPIN_TURNS = 7;
 const DIRECTION_SAMPLE = 0.98;
-const SETTLE_MIN_DEG = 10;
-const SETTLE_MAX_DEG = 85;
 
 export const easeOut = (value: number) => 1 - (1 - value) ** 3;
 
@@ -105,35 +98,4 @@ export const planRoll = (
   return candidates.reduce((best, candidate) =>
     candidate.dot > best.dot ? candidate : best,
   ).rotation;
-};
-
-export const planCssRoll = (
-  from: PlanarRotation,
-  face: PlanarRotation,
-  spinTurns: number,
-): { spun: PlanarRotation; landed: PlanarRotation } => {
-  const turnsX =
-    MIN_SPIN_TURNS +
-    Math.floor(Math.random() * (MAX_SPIN_TURNS - MIN_SPIN_TURNS + 1));
-  const turnsY = spinTurns - turnsX;
-  const dirX = Math.random() < 0.5 ? -1 : 1;
-  const dirY = Math.random() < 0.5 ? -1 : 1;
-  const settleDelta = (direction: number) =>
-    direction *
-    (SETTLE_MIN_DEG + Math.random() * (SETTLE_MAX_DEG - SETTLE_MIN_DEG));
-  const settleX = settleDelta(dirX);
-  const settleY = settleDelta(dirY);
-  const base: PlanarRotation = {
-    x: from.x + dirX * 360 * turnsX,
-    y: from.y + dirY * 360 * turnsY,
-  };
-  const spun: PlanarRotation = {
-    x: base.x + wrapDegrees(face.x - base.x - settleX),
-    y: base.y + wrapDegrees(face.y - base.y - settleY),
-  };
-  const landed: PlanarRotation = {
-    x: spun.x + settleX,
-    y: spun.y + settleY,
-  };
-  return { spun, landed };
 };

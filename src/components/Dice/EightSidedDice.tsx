@@ -78,6 +78,113 @@ const createFaceBasis = (direction: readonly [number, number, number]) => {
 
 const FACE_BASES = FACE_NORMALS.map(createFaceBasis);
 
+type FacePolygon = readonly (readonly [number, number, number])[];
+
+const lerp3 = (
+  from: readonly [number, number, number],
+  to: readonly [number, number, number],
+  t: number,
+): [number, number, number] => [
+  from[0] + (to[0] - from[0]) * t,
+  from[1] + (to[1] - from[1]) * t,
+  from[2] + (to[2] - from[2]) * t,
+];
+
+const computeFaceNormal = (verts: FacePolygon, center: THREE.Vector3) => {
+  const [a, b, c] = verts;
+  const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]] as const;
+  const ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]] as const;
+  const nx = ab[1] * ac[2] - ab[2] * ac[1];
+  const ny = ab[2] * ac[0] - ab[0] * ac[2];
+  const nz = ab[0] * ac[1] - ab[1] * ac[0];
+  const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+  const normal = new THREE.Vector3(nx / len, ny / len, nz / len);
+  if (normal.dot(center) < 0) normal.negate();
+  return normal;
+};
+
+const computeFaceCenter = (verts: FacePolygon) => {
+  const cx = verts.reduce((s, v) => s + v[0], 0) / verts.length;
+  const cy = verts.reduce((s, v) => s + v[1], 0) / verts.length;
+  const cz = verts.reduce((s, v) => s + v[2], 0) / verts.length;
+  return new THREE.Vector3(cx, cy, cz);
+};
+
+/* Chamfered octahedron: this far off each of the 6 vertices along its edges
+   (0.07 world units — same cut and camera as D4/D6, so the corner facets read
+   the same size on screen). Each triangular face becomes a hexagon (2 cut
+   points per corner), each vertex a flat quadrilateral (degree 4). Winding
+   and normals are auto-derived in the build loop (D10-style). Labels/roll
+   targets stay on the original 8 face planes — the cuts only remove corner
+   slivers; the hexagon is symmetric about the original centroid and face
+   planes/centres are unchanged (FACE_BASES/FACE_CENTER untouched). */
+const CORNER_CUT = 0.07;
+
+const OCTA_RADIUS = 1.7;
+
+const VERTICES: readonly [number, number, number][] = [
+  [OCTA_RADIUS, 0, 0],
+  [-OCTA_RADIUS, 0, 0],
+  [0, OCTA_RADIUS, 0],
+  [0, -OCTA_RADIUS, 0],
+  [0, 0, OCTA_RADIUS],
+  [0, 0, -OCTA_RADIUS],
+];
+
+// One triangle per FACE_NORMALS octant: the axis intercepts with matching
+// signs (winding is auto-oriented by the builder).
+const FACES = FACE_NORMALS.map(([sx, sy, sz]) => [
+  sx > 0 ? 0 : 1,
+  sy > 0 ? 2 : 3,
+  sz > 0 ? 4 : 5,
+]);
+
+const buildChamferedOcta = (cut: number): FacePolygon[] => {
+  const faces: FacePolygon[] = [];
+
+  for (const face of FACES) {
+    const hexagon: [number, number, number][] = [];
+    for (let i = 0; i < 3; i++) {
+      const a = VERTICES[face[i]];
+      const b = VERTICES[face[(i + 1) % 3]];
+      const edge = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+      const t = cut / edge;
+      hexagon.push(lerp3(a, b, t));
+      hexagon.push(lerp3(b, a, t));
+    }
+    faces.push(hexagon);
+  }
+
+  for (let v = 0; v < VERTICES.length; v++) {
+    const cuts: [number, number, number][] = [];
+    for (let n = 0; n < VERTICES.length; n++) {
+      const axis = Math.floor(n / 2);
+      if (axis === Math.floor(v / 2)) continue; // skip own axis + antipode
+      const a = VERTICES[v];
+      const b = VERTICES[n];
+      const edge = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+      cuts.push(lerp3(a, b, cut / edge));
+    }
+    // Sort cyclically around the vertex axis so the fan is non-crossing.
+    const centroid = computeFaceCenter(cuts);
+    const axisDir = new THREE.Vector3(...VERTICES[v]).normalize();
+    const e1 = new THREE.Vector3(...cuts[0]).sub(centroid);
+    const e2 = new THREE.Vector3().crossVectors(axisDir, e1);
+    cuts.sort((p, q) => {
+      const dp = new THREE.Vector3(...p).sub(centroid);
+      const dq = new THREE.Vector3(...q).sub(centroid);
+      return (
+        Math.atan2(dp.dot(e2), dp.dot(e1)) - Math.atan2(dq.dot(e2), dq.dot(e1))
+      );
+    });
+    faces.push(cuts);
+  }
+
+  return faces;
+};
+
+const CHAMFER_FACES = buildChamferedOcta(CORNER_CUT);
+
 const uprightOrientationForFace = (face: FaceBasis) => {
   const cameraNormal = new THREE.Vector3(0, 0, 1);
   const target = new THREE.Quaternion().setFromUnitVectors(
@@ -337,8 +444,44 @@ export default function EightSidedDice({
     const palette = COLOR_PALETTES[color];
     const opacity = resolveOpacity(translucent);
 
+    const geometry = new THREE.BufferGeometry();
+    const positions: number[] = [];
+    const normals: number[] = [];
+
+    for (const face of CHAMFER_FACES) {
+      const center = computeFaceCenter(face);
+      const normal = computeFaceNormal(face, center);
+      const nx = normal.x;
+      const ny = normal.y;
+      const nz = normal.z;
+
+      const [a, b, c] = face;
+      const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]] as const;
+      const ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]] as const;
+      const geoNx = ab[1] * ac[2] - ab[2] * ac[1];
+      const geoNy = ab[2] * ac[0] - ab[0] * ac[2];
+      const geoNz = ab[0] * ac[1] - ab[1] * ac[0];
+      const outward =
+        geoNx * center.x + geoNy * center.y + geoNz * center.z >= 0;
+      const ordered = outward ? face : [...face].reverse();
+
+      for (let i = 1; i < ordered.length - 1; i++) {
+        positions.push(...ordered[0], ...ordered[i], ...ordered[i + 1]);
+        normals.push(nx, ny, nz, nx, ny, nz, nx, ny, nz);
+      }
+    }
+
+    geometry.setAttribute(
+      'position',
+      new THREE.Float32BufferAttribute(positions, 3),
+    );
+    geometry.setAttribute(
+      'normal',
+      new THREE.Float32BufferAttribute(normals, 3),
+    );
+
     const mesh = new THREE.Mesh(
-      new THREE.OctahedronGeometry(1.7, 0),
+      geometry,
       new THREE.MeshStandardMaterial({
         color: palette.hex,
         roughness: 0.46,
@@ -348,6 +491,12 @@ export default function EightSidedDice({
         opacity,
         depthWrite: !translucent,
       }),
+    );
+    // Start (and remount on color/opacity change) from the current pose.
+    mesh.rotation.set(
+      rotationRef.current.x * degrees,
+      rotationRef.current.y * degrees,
+      rotationRef.current.z * degrees,
     );
 
     const labelFlip = new THREE.Quaternion().setFromAxisAngle(

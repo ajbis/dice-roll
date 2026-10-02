@@ -23,6 +23,7 @@
 - Color palette (`COLOR_PALETTES`) drives material hex and label color only
 - Far-side number visibility: every D4/D6/D8/D10/D12/D20 face gets **two complementary `FrontSide` labels** — an outward one with `palette.label` (seen normally) and a duplicate flipped 180° about local Y to face inward with a white glyph (`FAR_LABEL_COLOR`). Through the die the dark outward one is back-face-culled and the inward white one shows, drawn _before_ the body (z-sort) → solid faint number at `(1−α)·|white − page|`, identical for every palette. Far labels carry **`renderOrder = -1`** (painter sort checks `renderOrder` before `z`; near-silhouette faces tie with the body's center z otherwise) and sit slightly _inside_ the body (`FACE_CENTER − 0.2` D8, `center − 0.05·n` D4/D6/D10/D12/D20) so depth culling hides them when `translucent=false`
 - Near labels in D4/D6/D8/D10/D12/D20 carry **`renderOrder = 1`** (drawn after the body): with the default 0 they're z-sorted _before_ the translucent body whenever their world position sits behind the die center and get overdrawn to a ~13% ghost (numbers "disappearing" at oblique drag angles, reappearing past a threshold)
+- The scene rebuilds on color/opacity change (`useEffect` deps `[color, translucent]`) — every die must re-apply `mesh.rotation.set(rotationRef.current.x * degrees, …)` right after the mesh is created (D4/D6 pattern) so the pose survives the remount; without it the die teleports to identity while the hint still shows the rolled value
 
 ## Roll animation (`src/utils/rollAnimation.ts`)
 
@@ -139,3 +140,21 @@ Invariants (do not regress):
 - Far-twin containment: plane half-size 0.95 and offset 0.95 both < 1, and corner sum 2.85 ≤ 3 − `CORNER_CUT` (cut ≤ 0.15)
 - Near labels `renderOrder = 1`, far `= -1` (shared bullets) — otherwise pips vanish at oblique drag angles / far twins bleed through in opaque mode
 - Pose survives color/opacity remount (`rotationRef` applied when the mesh is created)
+
+## D8 (`src/components/Dice/EightSidedDice.tsx`)
+
+Design decisions (locked):
+
+- **Chamfered octahedron**: `CORNER_CUT = 0.07` world units cut off each of the 6 vertices along its edges (same cut and camera as D4/D6, so the facets read the same size on screen), built by `buildChamferedOcta` — each triangle face becomes a hexagon (2 cut points per corner), each vertex a flat quadrilateral (degree 4; cut points sorted cyclically around the vertex axis so the fan is non-crossing); D10-style builder (auto-orient winding via geo-normal · centre dot, fan, baked normals). Labels/roll targets stay on the original 8 face planes — `FACE_BASES`/`FACE_CENTER` untouched; the hexagon is symmetric about the original centroid
+- Regular octahedron: circumradius 1.7 (`OCTA_RADIUS`), axis-aligned vertices; `FACES` derived from `FACE_NORMALS` octants (sign-matched axis intercepts), so value → `FACE_BASES[value − 1]`
+- Labels: face-centre-mounted at `n · 1.08` (`FACE_CENTER`, floats ~0.10 above the face plane), far twins white at `n · 0.88` (`FACE_CENTER − 0.2`), font `700 200px` with a soft shadow, `LABEL_SIZE` 0.864, `renderOrder` 1 / −1 (shared bullets)
+- Material: `flatShading: true`, roughness 0.46, metalness 0.08 — D8's own look (flat shading uses the derivative normal in the fragment shader; the builder still bakes per-face normals)
+- Rolls/landing: shared `planRoll` (SPIN_TURNS 10) + `uprightOrientationForFace` twist → face-on landing with the number centred, 1500/750/260 ms, drag threshold 0.5 on the stage
+
+Invariants (do not regress):
+
+- `CHAMFER_FACES` = 8 hexagons + 6 quads; hexagons coplanar with their original face planes (verified to 1e-16), quads exactly planar; winding auto-oriented (a bad flip = back-face see-through holes); labels and roll targets index only the 8 hexagon faces — corner quads are never labelled or landed
+- `FACE_BASES` length = 8; every value lands face-on with its number centred
+- Far-twin containment: the digit disc (~0.34 radius) on the `n · 0.88` plane stays inside all 14 chamfer planes (worst margin −0.10, its own face plane); the whole far plane's corners stay inside the 6 corner quads (worst −0.66) — depth culling hides far twins when `translucent=false`
+- Near-digit clearance: face inradius 0.694 ≥ 0.34 digit radius from every hexagon edge (labels are centre-mounted, far from the cuts)
+- Size at 1280×800: identity bbox 304×304 @ (488,215), landed 254×256 identical for every value (two y-groups: values 1–4 @ 222, 5–8 @ 256); silhouette vertex facets ≈ 9px (cut 0.07 × √2 at the on-screen scale)

@@ -459,6 +459,12 @@ export default function TenSidedDice({
         depthWrite: !translucent,
       }),
     );
+    // Start (and remount on color/opacity change) from the current pose.
+    mesh.rotation.set(
+      rotationRef.current.x * degrees,
+      rotationRef.current.y * degrees,
+      rotationRef.current.z * degrees,
+    );
 
     const labelFlip = new THREE.Quaternion().setFromAxisAngle(
       new THREE.Vector3(0, 1, 0),

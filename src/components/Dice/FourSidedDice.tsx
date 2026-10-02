@@ -73,12 +73,19 @@ const LABEL_POS: readonly (readonly [number, number, number])[] = [
   [0.122687, 0.736122, -0.122687],
 ];
 
-// In-plane rotation per label (degrees about its face normal):
-// - selected (result) positions — edge shared with the face's rest face,
-//   table indices 2, 4, 6, 9 — keep 0 so the result reads upright at settle;
-// - non-selected positions get 180: the digit's top points outward along the
-//   radius from the face centre to its edge midpoint, so the numbers radiate
-//   out from the centre of the pane instead of all sitting upright.
+// Near labels: natural basis only — local up = face centre − edge midpoint,
+// digits read edge-aligned with their top toward the face centre (bottom-read
+// convention). The result label lands upright; the other two numbers on the
+// displayed face stay upside down — no per-label beta flips for human reading.
+// Far twins (seen through the body) keep the old beta phase and are flipped
+// in-plane about local X (far = orientation·Rz(beta)·Rx(pi)): every through-
+// body copy therefore reads 180° from how it used to — the other copies of
+// the rolled value come out upright, and every previously flagged ghost
+// rotates as requested.
+
+// Far-twin-only in-plane rotation (degrees about the face normal), same table
+// as the pre-fix layout: zeros are the result positions (edge shared with the
+// face's rest face) — table indices 2, 4, 6, 9.
 const LABEL_BETA_DEG: readonly number[] = [
   180, 180, 0, 180, 0, 180, 0, 180, 180, 0, 180, 180,
 ];
@@ -504,8 +511,11 @@ export default function FourSidedDice({
       rotationRef.current.z * degrees,
     );
 
+    // Far-twin in-plane flip about local X: faces inward (normal −n) and,
+    // combined with the beta phase below, renders every through-body copy
+    // 180° rotated from the pre-fix layout.
     const labelFlip = new THREE.Quaternion().setFromAxisAngle(
-      new THREE.Vector3(0, 1, 0),
+      new THREE.Vector3(1, 0, 0),
       Math.PI,
     );
 
@@ -531,7 +541,6 @@ export default function FourSidedDice({
             new THREE.Vector3(0, 0, 1),
             LABEL_BETA_DEG[tableIndex] * degrees,
           );
-          const full = orientation.multiply(beta);
 
           const near = createLabel(value, palette.label);
           if (near) {
@@ -543,7 +552,7 @@ export default function FourSidedDice({
             near.position
               .copy(new THREE.Vector3(...LABEL_POS[tableIndex]))
               .addScaledVector(normal, 0.01);
-            near.quaternion.copy(full);
+            near.quaternion.copy(orientation);
             mesh.add(near);
           }
 
@@ -553,7 +562,7 @@ export default function FourSidedDice({
             far.position
               .copy(new THREE.Vector3(...LABEL_POS[tableIndex]))
               .addScaledVector(normal, -0.05);
-            far.quaternion.copy(full).multiply(labelFlip);
+            far.quaternion.copy(orientation).multiply(beta).multiply(labelFlip);
             mesh.add(far);
           }
         }

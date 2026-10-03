@@ -23,10 +23,10 @@ export const COLOR_PALETTES: Record<DiceColor, ColorPalette> = {
     label: '#ffffff',
   },
   green: {
-    hex: 0x10b981,
-    cssTop: [16, 185, 129],
-    cssBottom: [5, 150, 105],
-    label: '#ecfdf5',
+    hex: 0x0bbd68,
+    cssTop: [11, 189, 104],
+    cssBottom: [9, 165, 90],
+    label: '#ffffff',
   },
   white: {
     hex: 0xf0f0f0,

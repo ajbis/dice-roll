@@ -1,8 +1,14 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Dice from './components/Dice';
 import SettingsButton from './components/SettingsButton/SettingsButton';
 import SettingsDialog from './components/SettingsDialog/SettingsDialog';
-import { getSettings, type Settings } from './utils/settings';
+import {
+  COLOR_OPTIONS,
+  getSettings,
+  nextOption,
+  SIDES_OPTIONS,
+  type Settings,
+} from './utils/settings';
 
 export default function App() {
   const [settings, setSettings] = useState<Settings>(() => getSettings());
@@ -17,6 +23,32 @@ export default function App() {
     setIsSettingsOpen(false);
     settingsButtonRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (isSettingsOpen) return;
+      if (event.ctrlKey || event.altKey || event.metaKey) return;
+      const key = event.key.toLowerCase();
+      if (key === 's') {
+        setSettings((previous) => ({
+          ...previous,
+          sides: nextOption(SIDES_OPTIONS, previous.sides),
+        }));
+      } else if (key === 'c') {
+        setSettings((previous) => ({
+          ...previous,
+          color: nextOption(COLOR_OPTIONS, previous.color),
+        }));
+      } else if (key === 't') {
+        setSettings((previous) => ({
+          ...previous,
+          translucent: !previous.translucent,
+        }));
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isSettingsOpen]);
 
   return (
     <>

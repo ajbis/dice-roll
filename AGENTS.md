@@ -50,8 +50,8 @@ Invariants (do not regress):
 
 Each `.stage--*` sets its own `--die-size` clamp — the only per-die size lever (canvas px; camera is fov 28 / z 7 for every die, so on-screen px ∝ canvas px). The shared `.three-scene { width/height: var(--die-size) }` rules live in `EightSidedDice.scss` but apply to all dice.
 
-- Clamps: D4 `clamp(257px, 59vmin, 445px)`, D6 `clamp(204px, 48vmin, 376px)`, D8 `clamp(200px, 45.6vmin, 350px)`, D10 `clamp(214px, 47.5vmin, 376px)`, D12/D20 `clamp(180px, 42vmin, 320px)` — rest-pose bbox sqrt(area) at 1280×800 = D4 216, D6 252, D8 241, D10 241, D12 262, D20 250 (spread as built; D4/D8/D10 are the three smallest — do not equalise)
-- Sizing rule: sizes are relative per die, not equal; change clamps only as a set and re-measure all six after any edit (screenshot the canvas, pixel-bbox the die against background `#292929`±14, take sqrt(area)). D12's rest bbox is 320px = its canvas width (touches the edge)
+- Clamps: D4 `clamp(231px, 53.1vmin, 400px)`, D6 `clamp(204px, 48vmin, 376px)`, D8 `clamp(200px, 45.6vmin, 350px)`, D10 `clamp(214px, 47.5vmin, 376px)`, D12/D20 `clamp(180px, 42vmin, 320px)` — rest-pose sqrt(pixel count) at 1280×800 = D4 194, D6 252, D8 241, D10 241, D12 262, D20 250 (spread as built; D4/D8/D10 are the three smallest — do not equalise)
+- Sizing rule: sizes are relative per die, not equal; change clamps only as a set and re-measure all six after any edit (screenshot the canvas at 1280×800, count pixels outside `#292929`±14, take sqrt of the count — a w×h bbox reads much larger, e.g. D8 identity 334×334 → sqrt 334 vs area 241). D12's rest w×h bbox is 320px = its canvas width (touches the edge)
 
 ## D10 truncation (`src/components/Dice/TenSidedDice.tsx`)
 

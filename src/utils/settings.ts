@@ -54,15 +54,19 @@ export const COLOR_PALETTES: Record<DiceColor, ColorPalette> = {
   },
 };
 
-const SIDES_WHITELIST: readonly number[] = [4, 6, 8, 10, 12, 20];
-const COLOR_WHITELIST: readonly DiceColor[] = [
+export const SIDES_OPTIONS: readonly DiceSides[] = [4, 6, 8, 10, 12, 20];
+export const COLOR_OPTIONS: readonly DiceColor[] = [
   'red',
-  'green',
-  'white',
-  'black',
-  'blue',
   'yellow',
+  'green',
+  'blue',
+  'black',
+  'white',
 ];
+
+export function nextOption<T>(options: readonly T[], current: T): T {
+  return options[(options.indexOf(current) + 1) % options.length];
+}
 
 export const DEFAULT_SETTINGS: Settings = {
   sides: 6,
@@ -79,13 +83,13 @@ export function getSettings(): Settings {
   const params = new URLSearchParams(window.location.search);
 
   const rawSides = Number(params.get('s'));
-  const sides = SIDES_WHITELIST.includes(rawSides)
+  const sides = SIDES_OPTIONS.includes(rawSides as DiceSides)
     ? (rawSides as DiceSides)
     : DEFAULT_SETTINGS.sides;
 
   const rawColor = params.get('c')?.toLowerCase();
   const color =
-    rawColor !== undefined && COLOR_WHITELIST.includes(rawColor as DiceColor)
+    rawColor !== undefined && COLOR_OPTIONS.includes(rawColor as DiceColor)
       ? (rawColor as DiceColor)
       : DEFAULT_SETTINGS.color;
 

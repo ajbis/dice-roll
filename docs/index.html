@@ -5,8 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="A simple dice roller" />
     <title>Dice Roller</title>
-    <script type="module" crossorigin src="./assets/index-CwawGgcA.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-CvJyZO7I.css">
+    <!-- First paint must be dark: the bundled CSS arrives after the initial
+         paint (via JS in dev), which would flash a full-page white. -->
+    <style>
+      html {
+        background: #292929;
+      }
+    </style>
+    <script type="module" crossorigin src="./assets/index-2KD_btLE.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-drjX27VP.css">
   </head>
   <body>
     <div id="root"></div>

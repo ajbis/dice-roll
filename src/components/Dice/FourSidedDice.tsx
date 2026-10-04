@@ -3,6 +3,11 @@ import * as THREE from 'three';
 import { fetchDiceRoll } from '../../utils/rollDice';
 import { easeOut, planRoll } from '../../utils/rollAnimation';
 import {
+  acquireThree,
+  claimFirstAttach,
+  releaseThree,
+} from '../../utils/threeCanvas';
+import {
   COLOR_PALETTES,
   resolveOpacity,
   type DiceColor,
@@ -262,6 +267,7 @@ export default function FourSidedDice({
 }: FourSidedDiceProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const meshRef = useRef<THREE.Mesh | null>(null);
+  const sceneRef = useRef<THREE.Scene | null>(null);
   const renderFrameRef = useRef<number | null>(null);
   const dragFrameRef = useRef<number | null>(null);
   const animationFrameRef = useRef<number | null>(null);
@@ -439,18 +445,7 @@ export default function FourSidedDice({
   }, [animateTo, roll]);
 
   useEffect(() => {
-    const mount = mountRef.current;
-    if (!mount) return;
-
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(28, 1, 0.1, 100);
-    camera.position.set(0, 0, 7);
-    camera.lookAt(0, 0, 0);
-
-    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setClearColor(0x000000, 0);
-    mount.appendChild(renderer.domElement);
 
     const geometry = new THREE.BufferGeometry();
     const vertices: number[] = [];
@@ -579,27 +574,9 @@ export default function FourSidedDice({
     scene.add(keyLight);
 
     meshRef.current = mesh;
-
-    const resize = () => {
-      const width = mount.clientWidth;
-      const height = mount.clientHeight;
-      renderer.setSize(width, height, false);
-      camera.aspect = width / height;
-      camera.updateProjectionMatrix();
-    };
-    const resizeObserver = new ResizeObserver(resize);
-    resizeObserver.observe(mount);
-    resize();
-
-    const render = () => {
-      renderFrameRef.current = requestAnimationFrame(render);
-      renderer.render(scene, camera);
-    };
-    render();
+    sceneRef.current = scene;
 
     return () => {
-      resizeObserver.disconnect();
-      if (renderFrameRef.current) cancelAnimationFrame(renderFrameRef.current);
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
@@ -614,11 +591,55 @@ export default function FourSidedDice({
         label.material.map?.dispose();
         label.material.dispose();
       });
-      renderer.dispose();
-      mount.removeChild(renderer.domElement);
       meshRef.current = null;
+      sceneRef.current = null;
     };
   }, [color, translucent]);
+
+  // Shared canvas/context (threeCanvas singleton): die switches reparent the
+  // same canvas into the incoming stage instead of creating a context per
+  // mount — per-mount contexts race the GPU process on fast switches and can
+  // present white before their first frame lands. Scene contents come from
+  // the rebuild effect above; the first draw happens while detached.
+  useEffect(() => {
+    const mount = mountRef.current;
+    if (!mount) return;
+
+    const { renderer, camera } = acquireThree();
+
+    const resize = () => {
+      const width = mount.clientWidth;
+      const height = mount.clientHeight;
+      renderer.setSize(width, height, false);
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+    };
+    const resizeObserver = new ResizeObserver(resize);
+    resizeObserver.observe(mount);
+    resize();
+
+    if (sceneRef.current) renderer.render(sceneRef.current, camera);
+    if (claimFirstAttach()) {
+      // Fresh context: keep the canvas out of the DOM until the GPU has
+      // completed the first frame — an initializing context can present
+      // white at its first composite.
+      renderer.getContext().finish();
+    }
+    mount.appendChild(renderer.domElement);
+
+    const render = () => {
+      renderFrameRef.current = requestAnimationFrame(render);
+      if (sceneRef.current) renderer.render(sceneRef.current, camera);
+    };
+    render();
+
+    return () => {
+      renderer.domElement.remove();
+      resizeObserver.disconnect();
+      if (renderFrameRef.current) cancelAnimationFrame(renderFrameRef.current);
+      releaseThree();
+    };
+  }, []);
 
   return (
     <div

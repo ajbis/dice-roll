@@ -83,27 +83,30 @@
   white-space: nowrap;
 }
 
+/* 6 labels + 5×2px dividers = 310px; +4px focus-outline spill per end =
+   318px, so the row stays within its 320px width budget. Size the label
+   square and font together if options change. */
 .sides-picker__label {
   position: relative;
 
   display: grid;
   place-items: center;
 
-  width: 60px;
-  height: 60px;
+  width: 50px;
+  height: 50px;
 
   font-family: dice-font, system-ui, sans-serif;
-  font-size: 2rem;
+  font-size: 1.65rem;
   font-weight: 400;
 
   cursor: pointer;
 }
 
-/* Selection dot below the number, inside the 60px square — centred in the
-   gap between the digit's baseline (~41px) and the focus outline (~62px). */
+/* Selection dot below the number, inside the 50px square — centred in the
+   gap between the digit's baseline (~34px) and the focus outline (~52px). */
 .sides-picker__label::after {
   position: absolute;
-  bottom: 5.5px;
+  bottom: 4px;
   left: 50%;
 
   width: 6px;

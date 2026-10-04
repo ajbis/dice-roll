@@ -1,7 +1,9 @@
 import { Fragment, useEffect, useRef } from 'react';
 import type { DiceSides } from '../../utils/rollDice';
 import {
+  COLOR_OPTIONS,
   COLOR_PALETTES,
+  SIDES_OPTIONS,
   type DiceColor,
   type Settings,
 } from '../../utils/settings';
@@ -9,16 +11,6 @@ import './SettingsDialog.scss';
 
 const FOCUSABLE_SELECTOR =
   'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
-
-const SIDES_OPTIONS: readonly DiceSides[] = [4, 6, 8, 10, 12, 20];
-const COLOR_OPTIONS: readonly DiceColor[] = [
-  'red',
-  'yellow',
-  'green',
-  'blue',
-  'black',
-  'white',
-];
 
 type SettingsDialogProps = {
   sides: DiceSides;

@@ -22,10 +22,18 @@
 }
 
 .hint {
+  position: fixed;
+  right: 0;
+  bottom: 25vh;
+  left: 0;
+  z-index: 5;
+
   margin: 0;
 
   font-size: 0.95rem;
   letter-spacing: 0.02em;
   text-align: center;
   color: rgb(255 255 255 / 60%);
+
+  pointer-events: none;
 }

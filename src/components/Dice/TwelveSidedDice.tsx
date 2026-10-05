@@ -12,6 +12,7 @@ import {
   resolveOpacity,
   type DiceColor,
 } from '../../utils/settings';
+import DiceHint from './DiceHint';
 import './TwelveSidedDice.scss';
 
 type FaceValue = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
@@ -558,15 +559,7 @@ export default function TwelveSidedDice({
       onPointerCancel={handlePointerUp}
     >
       <div ref={mountRef} className="three-scene" />
-      <p className="hint">
-        {isRolling
-          ? 'Rolling...'
-          : error
-            ? error
-            : result !== null
-              ? `You rolled ${result}. Drag again to roll.`
-              : 'Drag from the centre. Let go past halfway to roll.'}
-      </p>
+      <DiceHint isRolling={isRolling} error={error} result={result} />
     </div>
   );
 }

@@ -12,6 +12,7 @@ import {
   resolveOpacity,
   type DiceColor,
 } from '../../utils/settings';
+import DiceHint from './DiceHint';
 import './Dice.scss';
 import './SixSidedDice.scss';
 
@@ -633,15 +634,7 @@ export default function SixSidedDice({
       onPointerCancel={handlePointerUp}
     >
       <div ref={mountRef} className="three-scene" />
-      <p className="hint">
-        {isRolling
-          ? 'Rolling...'
-          : error
-            ? error
-            : result
-              ? `You rolled ${result}. Drag again to roll.`
-              : 'Drag from the centre. Let go past halfway to roll.'}
-      </p>
+      <DiceHint isRolling={isRolling} error={error} result={result} />
     </div>
   );
 }

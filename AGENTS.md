@@ -50,8 +50,21 @@ Invariants (do not regress):
 
 Each `.stage--*` sets its own `--die-size` clamp — the only per-die size lever (canvas px; camera is fov 28 / z 7 for every die, so on-screen px ∝ canvas px). The shared `.three-scene { width/height: var(--die-size) }` rules live in `EightSidedDice.scss` but apply to all dice.
 
-- Clamps: D4 `clamp(257px, 59vmin, 445px)`, D6 `clamp(204px, 48vmin, 376px)`, D8 `clamp(200px, 45.6vmin, 350px)`, D10 `clamp(214px, 47.5vmin, 376px)`, D12/D20 `clamp(180px, 42vmin, 320px)` — rest-pose bbox sqrt(area) at 1280×800 = D4 216, D6 252, D8 241, D10 241, D12 262, D20 250 (spread as built; D4/D8/D10 are the three smallest — do not equalise)
-- Sizing rule: sizes are relative per die, not equal; change clamps only as a set and re-measure all six after any edit (screenshot the canvas, pixel-bbox the die against background `#292929`±14, take sqrt(area)). D12's rest bbox is 320px = its canvas width (touches the edge)
+- Clamps: D4 `clamp(231px, 53.1vmin, 400px)`, D6 `clamp(204px, 48vmin, 376px)`, D8 `clamp(200px, 45.6vmin, 350px)`, D10 `clamp(214px, 47.5vmin, 376px)`, D12/D20 `clamp(180px, 42vmin, 320px)` — rest-pose sqrt(pixel count) at 1280×800 = D4 194, D6 252, D8 241, D10 241, D12 262, D20 250 (spread as built; D4/D8/D10 are the three smallest — do not equalise)
+- Sizing rule: sizes are relative per die, not equal; change clamps only as a set and re-measure all six after any edit (screenshot the canvas at 1280×800, count pixels outside `#292929`±14, take sqrt of the count — a w×h bbox reads much larger, e.g. D8 identity 334×334 → sqrt 334 vs area 241). D12's rest w×h bbox is 320px = its canvas width (touches the edge)
+
+## Hint (`src/components/Dice/DiceHint.tsx`, styles in `Dice.scss`)
+
+- `DiceHint` (default export) is the one hint component used by all six dice — props `isRolling: boolean`, `error: string | null`, `result: number | null` (`FaceValue` is a per-die local type, so the hint takes plain `number`); the idle/rolling/error/result text lives here too
+- Its `<p className="hint">` is **portalled to `document.body`** — `.stage` carries `contain: layout paint`, which makes the stage the containing block for `position: fixed` descendants (an in-stage hint anchors to the stage, not the viewport, and scrolls with the page)
+- Same placement for every die: `position: fixed; bottom: 25vh; left: 0; right: 0; z-index: 5; text-align: center; pointer-events: none` — block bottom edge 25% up the viewport, full-width band, text centred
+- `pointer-events: none` → drag rolls hit-test through to the stage/canvas; `z-index: 5` paints above the die but below the settings button (10) and settings dialog (20)
+- The hint is out of the stage flex flow: `.stage` holds only `.three-scene`, centred on its own
+
+Invariants (do not regress):
+
+- Hint box at 1280×800: `[0, 582, 1280, 18]`, bottom edge 600, parent `BODY` — identical for all six dice; `elementFromPoint` at its centre returns the stage/canvas, never the hint
+- Forced onto the die, the hint renders above it
 
 ## D10 truncation (`src/components/Dice/TenSidedDice.tsx`)
 
@@ -138,7 +151,7 @@ Design:
 - **Chamfered cube** (faceted corners, no curves): `CORNER_CUT = 0.07` world units cut off each of the 8 vertices along its edges (side = 2 → ~9px triangle legs at final size), built by `buildChamferedCube` — each square face becomes an octagon (2 cut points per corner), each vertex becomes a small flat triangle; D10-style builder (auto-orient winding via geo-normal · centre dot, fan n-gons, per-face baked normals + `flatShading: false`). Silhouette extremes stay at edge midpoints → landed bbox unaffected by the cut; `CORNER_CUT` is the tunable (chop deeper = cuboctahedron territory; 0 keeps the plain cube)
 - **Pips, not digits**: 512px canvas, 12% inset, 3×3 cells, pip radius `0.055733 × size`, grid centres `[0.246667, 0.5, 0.753333]` of the plane; colour `palette.label` (far twins white)
 - Value → face (index = value − 1): `1 +Z front, 2 +Y top, 3 +X right, 4 −X left, 5 −Y bottom, 6 −Z back` — opposite pairs 1-6 / 2-5 / 3-4 (classic d6); identity pose shows 1 front / 2 top / 3 right
-- **Size**: canvas `--die-size: clamp(204px, 48vmin, 376px)` (fov 28, z 7, cube side 2) — measured red-bbox 252×252 @ (514,241) at 1280×800, identical for every landed value
+- **Size**: canvas `--die-size: clamp(204px, 48vmin, 376px)` (fov 28, z 7, cube side 2) — measured red-bbox 252×252 @ (514,274) at 1280×800, identical for every landed value
 - Labels: near plane `2 × 2` at `n · 1.01` (`renderOrder = 1`), far plane `1.9 × 1.9` at `n · 0.95`, flipped π about local Y, white, `renderOrder = -1` — far corners `(0.95, 0.95, 0.95)` strictly inside the chamfered solid (corner sum 2.85 ≤ 3 − `CORNER_CUT`, holds for any cut ≤ 0.15) so depth culling hides them when `translucent=false`
 - Rolls use the shared path: `planRoll` (SPIN_TURNS 10), `uprightOrientationForFace` twist → pips land natural (6 = vertical columns, 2/3 = top-left→bottom-right), 1500/750/260 ms, drag threshold 0.5 measured on the stage (same as the other dice)
 - The mesh applies `rotationRef` on mount (D4 pattern) — a color/opacity remount keeps the landed pose
@@ -169,4 +182,4 @@ Invariants (do not regress):
 - `FACE_BASES` length = 8; every value lands face-on with its number centred
 - Far-twin containment: the digit disc (~0.34 radius) on the `n · 0.88` plane stays inside all 14 chamfer planes (worst margin −0.10, its own face plane); the whole far plane's corners stay inside the 6 corner quads (worst −0.66) — depth culling hides far twins when `translucent=false`
 - Near-digit clearance: face inradius 0.694 ≥ 0.34 digit radius from every hexagon edge (labels are centre-mounted, far from the cuts)
-- Size at 1280×800: identity bbox 334×334 @ (473,200), landed 278×280 (279 for values 5–8), two y-groups: values 1–4 @ 209, 5–8 @ 246; silhouette vertex facets ≈ 10px (cut 0.07 × √2 at the on-screen scale)
+- Size at 1280×800: identity bbox 334×334 @ (473,233), landed 278×280 (279 for values 5–8), two y-groups: values 1–4 @ 242, 5–8 @ 279; silhouette vertex facets ≈ 10px (cut 0.07 × √2 at the on-screen scale)

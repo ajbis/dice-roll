@@ -27,15 +27,15 @@
 
 - Far-side number visibility: every D4/D6/D8/D10/D12/D20 face gets **two complementary `FrontSide` labels** — an outward one with `palette.label` (seen normally) and a duplicate flipped 180° about a local axis to face inward with a white glyph (`FAR_LABEL_COLOR`; local Y in D6/D8/D10/D12/D20, and in D4 `Rz(β)·Rx` — see its section). Through the die the dark outward one is back-face-culled and the inward white one shows, drawn _before_ the body (z-sort) → solid faint number at `(1−α)·|white − page|`, identical for every palette. Far labels carry **`renderOrder = -1`** (painter sort checks `renderOrder` before `z`; near-silhouette faces tie with the body's center z otherwise) and sit slightly _inside_ the body (`FACE_CENTER − 0.2` D8, `center − 0.05·n` D4/D6/D10/D12/D20) so depth culling hides them when `translucent=false`
 - Near labels in D4/D6/D8/D10/D12/D20 carry **`renderOrder = 1`** (drawn after the body): with the default 0 they're z-sorted _before_ the translucent body whenever their world position sits behind the die center and get overdrawn to a ~13% ghost (numbers "disappearing" at oblique drag angles, reappearing past a threshold)
-- The scene rebuilds on color/opacity change (`useEffect` deps `[color, translucent]`) — every die must re-apply `mesh.rotation.set(rotationRef.current.x * degrees, …)` right after the mesh is created (D4/D6 pattern) so the pose survives the remount; without it the die teleports to identity while the hint still shows the rolled value
-- The WebGL renderer/canvas is a **shared singleton** (`acquireThree`/`releaseThree` in `src/utils/threeCanvas.ts`): one context for the whole session — a die switch reparents the same canvas into the incoming stage (`mount.appendChild`) instead of creating/losing a context, so fast `s` cycling can't present an unproven fresh context (white flash). `releaseThree` defers destroy (`setTimeout(0)` → `dispose()` + `forceContextLoss()`) so a same-flush reacquire — normal switch or StrictMode remount — keeps the same canvas. Per-mount effect (deps `[]`): acquire → `ResizeObserver` + resize → draw detached → **session-first attach** (`claimFirstAttach()`) waits for `gl.finish()` before `appendChild` (an initializing context can present white at its first composite; later mounts attach immediately) → rAF loop (reads `sceneRef.current`); cleanup: `canvas.remove()` → disconnect → cancel rAF → release. First paint is dark via inline `html{background:#292929}` in `index.html` — bundled CSS arrives after the initial paint (CSS is JS-injected in dev), which would flash a full-page white. The `[color, translucent]` effect swaps only scene contents and sets `sceneRef`/`meshRef`; rebuild cleanup: cancel animation rAF → dispose geometry/material/labels → null `meshRef`/`sceneRef`
+- The scene rebuilds on color/opacity change (`useEffect` deps `[color, translucent, meshRef, rotationRef, cancelAnimation]` — see Interaction driver) — every die must re-apply `mesh.rotation.set(rotationRef.current.x * degrees, …)` right after the mesh is created (D4/D6 pattern) so the pose survives the remount; without it the die teleports to identity while the hint still shows the rolled value
+- The WebGL renderer/canvas is a **shared singleton** (`acquireThree`/`releaseThree` in `src/utils/threeCanvas.ts`): one context for the whole session — a die switch reparents the same canvas into the incoming stage (`mount.appendChild`) instead of creating/losing a context, so fast `s` cycling can't present an unproven fresh context (white flash). `releaseThree` defers destroy (`setTimeout(0)` → `dispose()` + `forceContextLoss()`) so a same-flush reacquire — normal switch or StrictMode remount — keeps the same canvas. Per-mount effect (deps `[]`): acquire → `ResizeObserver` + resize → draw detached → **session-first attach** (`claimFirstAttach()`) waits for `gl.finish()` before `appendChild` (an initializing context can present white at its first composite; later mounts attach immediately) → rAF loop (reads `sceneRef.current`); cleanup: `canvas.remove()` → disconnect → cancel rAF → release. First paint is dark via inline `html{background:#292929}` in `index.html` — bundled CSS arrives after the initial paint (CSS is JS-injected in dev), which would flash a full-page white. The scene effect swaps only scene contents and sets `sceneRef`/`meshRef`; rebuild cleanup: `cancelAnimation()` (driver-owned roll rAF) → dispose geometry/material/labels → null `meshRef`/`sceneRef`
 
 ## Roll animation (`src/utils/rollAnimation.ts`)
 
 Behaviour: the settle phase continues the spin's direction — never reverses — and lands on the rolled face upright.
 
-- `easeOut` lives here and is shared with `animateTo`/`animateQuaternion` so direction sampling uses the exact trajectory the animator runs
-- `planRoll(from, target, spinTurns)` — D4/D6/D8/D10/D12/D20:
+- `easeOut` lives here and is shared with the interaction driver's `animateTo`/`animateQuaternion` so direction sampling uses the exact trajectory the animator runs
+- `planRoll(from, target, spinTurns)`, called by the interaction driver's `roll` for D4/D6/D8/D10/D12/D20:
   - Settle is one fixed parent-frame axis: `â` = shortest-path axis of `fromQ⁻¹·target` (flip so `w ≥ 0`), random `ψ ∈ [0°, 180°]`, `mid = R(â, −ψ)·target`. A slerp from `mid` to `target` keeps the parent axis `â` constant for its whole run (geodesic), so `dot > 0` with `â` ⇔ never reverses
   - 40 spin candidates (turnsX 3–7 × 8 sign combos): per axis `from + dir·360·turns + wrapDegrees(mid − ·)` → `q(spun) ≡ q(mid)` (Euler ±360k ≡), ≥ 2.5 full turns so direction dominates the wrap
   - Keep candidates whose spin terminal direction (easeOut samples at t = 0.98 → 1.0) has `dot > 0` with `â`; pick randomly among matches, max-dot fallback when none
@@ -45,6 +45,24 @@ Invariants (do not regress):
 
 - D4/D6/D8/D10/D12/D20 settle slerp angle ≤ π — a larger `ψ` makes THREE take the opposite shortest path (`slerp` flips on `dot < 0`)
 - D4/D6/D8/D10/D12/D20 spin must end exactly at `q(mid)` — any per-axis value not ≡ `mid (mod 360)` breaks the axis handoff
+
+## Interaction driver (`src/components/Dice/hooks/useDiceInteraction.ts`)
+
+The drag/roll/animate block that all six dice share lives here; each die only passes its per-die config.
+
+- API: `useDiceInteraction({ fetchRoll, resolveTarget, initialRotation? })` → `{ meshRef, rotationRef, cancelAnimation, isRolling, isDragging, error, result, onPointerDown, onPointerMove, onPointerUp }`
+- Owns, identical across dice: constants `MAX_TILT_DEG` 65, `ROLL_THRESHOLD` 0.5, `SPIN_TURNS` 10, `SPIN_MS` 1500, `SETTLE_MS` 750, `SNAP_BACK_MS` 260, exported `degrees`; `Rotation` (exported), `DragState`, `clamp`, `rotationFromQuaternion`; the interaction refs/state and the 7 callbacks (`setRotation`, `animateTo`, `animateQuaternion`, `roll`, pointer down/move/up)
+- Per-die config: `fetchRoll: () => fetchDiceRoll(4|6|8|10|12|20)` (the `rollDice` overloads keep the narrow value type through `V extends number`); `resolveTarget` = the die's landing resolver — D4 `restingOrientationForFace(FACE_TO_NUMBER.indexOf(value))`, D6/D8 `uprightOrientationForFace(FACE_BASES[value - 1])`, D10/D12/D20 `uprightOrientationForFace(FACE_BASES[FACE_TO_NUMBER.indexOf(value)])`; only D4 passes `initialRotation: INITIAL_ROTATION`, the rest default to zeros
+- `roll` reads `fetchRoll`/`resolveTarget` through `optionsRef` (latest-ref), so its deps stay `[animateQuaternion, animateTo]` — the inline config arrows get a fresh identity every render without churning `roll`/`handlePointerUp`
+- Each die keeps only `mountRef`/`sceneRef`/`renderFrameRef`; the handlers are renamed at destructure (`onPointerDown: handlePointerDown`, …) so the JSX is unchanged, and `degrees` is still imported for the scene effect's pose lines
+- Scene-rebuild cleanup calls the returned `cancelAnimation()` (stable `useCallback([])` — the roll rAF is hook-owned) and the effect deps are `[color, translucent, meshRef, rotationRef, cancelAnimation]`: hook-returned values are not `useRef`-declared in the component, so `react-hooks/exhaustive-deps` requires them listed (stable identities → no extra rebuilds), and a cleanup that reads a foreign `ref.current` directly warns
+
+Invariants (do not regress):
+
+- `roll` deps stay exactly `[animateQuaternion, animateTo]`; timings/tilt stay 1500/750/260 ms, threshold 0.5, `MAX_TILT_DEG` 65, `SPIN_TURNS` 10
+- D4's `initialRotation` must initialise both `rotationRef` and `restRef` — otherwise the die starts at identity (no point-forward start) and snap-back targets the wrong pose
+- Each die's `resolveTarget` stays its own landing rule (D4 rest-face-down vs the upright twist; D6/D8 `value − 1` vs the `FACE_TO_NUMBER.indexOf` dice)
+- The scene effect re-applies `rotationRef` on every rebuild (Rendering & labels) — the ref comes from the hook now, the rule is unchanged
 
 ## Die sizing (`src/components/Dice/*.scss`)
 
@@ -153,7 +171,7 @@ Design:
 - Value → face (index = value − 1): `1 +Z front, 2 +Y top, 3 +X right, 4 −X left, 5 −Y bottom, 6 −Z back` — opposite pairs 1-6 / 2-5 / 3-4 (classic d6); identity pose shows 1 front / 2 top / 3 right
 - **Size**: canvas `--die-size: clamp(204px, 48vmin, 376px)` (fov 28, z 7, cube side 2) — measured red-bbox 252×252 @ (514,274) at 1280×800, identical for every landed value
 - Labels: near plane `2 × 2` at `n · 1.01` (`renderOrder = 1`), far plane `1.9 × 1.9` at `n · 0.95`, flipped π about local Y, white, `renderOrder = -1` — far corners `(0.95, 0.95, 0.95)` strictly inside the chamfered solid (corner sum 2.85 ≤ 3 − `CORNER_CUT`, holds for any cut ≤ 0.15) so depth culling hides them when `translucent=false`
-- Rolls use the shared path: `planRoll` (SPIN_TURNS 10), `uprightOrientationForFace` twist → pips land natural (6 = vertical columns, 2/3 = top-left→bottom-right), 1500/750/260 ms, drag threshold 0.5 measured on the stage (same as the other dice)
+- Rolls use `useDiceInteraction` → `planRoll` (SPIN_TURNS 10) + `uprightOrientationForFace` twist → pips land natural (6 = vertical columns, 2/3 = top-left→bottom-right); timings/threshold are the driver's — 1500/750/260 ms, drag threshold 0.5 measured on the stage
 - The mesh applies `rotationRef` on mount (D4 pattern) — a color/opacity remount keeps the landed pose
 - Material/lights follow D10 (roughness 0.4, metalness 0, `flatShading: false`, ambient/hemi/dir 1.0); `Dice.scss` only holds the shared `.stage`/`.hint` base
 
@@ -174,7 +192,7 @@ Design:
 - Regular octahedron: circumradius 1.7 (`OCTA_RADIUS`), axis-aligned vertices; `FACES` derived from `FACE_NORMALS` octants (sign-matched axis intercepts), so value → `FACE_BASES[value − 1]`
 - Labels: face-centre-mounted at `n · 1.08` (`FACE_CENTER`, floats ~0.10 above the face plane), far twins white at `n · 0.88` (`FACE_CENTER − 0.2`), font `700 200px` with a soft shadow, `LABEL_SIZE` 0.864, `renderOrder` 1 / −1 (shared bullets)
 - Material: `flatShading: true`, roughness 0.46, metalness 0.08 — D8's own look (flat shading uses the derivative normal in the fragment shader; the builder still bakes per-face normals)
-- Rolls/landing: shared `planRoll` (SPIN_TURNS 10) + `uprightOrientationForFace` twist → face-on landing with the number centred, 1500/750/260 ms, drag threshold 0.5 on the stage
+- Rolls/landing: `useDiceInteraction` → shared `planRoll` (SPIN_TURNS 10) + `uprightOrientationForFace` twist → face-on landing with the number centred, 1500/750/260 ms, drag threshold 0.5 on the stage (driver-owned)
 
 Invariants (do not regress):
 

@@ -23,12 +23,12 @@
 - Translucent opacity is one shared const, `TRANSLUCENT_OPACITY = 0.87` in `settings.ts`, via `resolveOpacity(translucent)` — uniform across every die; `translucent=false` → 1.0
 - Color palette (`COLOR_PALETTES`) drives material hex and label color only
 
-## Rendering & labels (shared across dice) (`src/utils/threeCanvas.ts`, `src/components/Dice/*.tsx`)
+## Rendering & labels (shared across dice) (`src/utils/threeCanvas.ts`, `src/components/Dice/*.tsx`, `src/components/Dice/hooks/useThreeStage.ts`)
 
 - Far-side number visibility: every D4/D6/D8/D10/D12/D20 face gets **two complementary `FrontSide` labels** — an outward one with `palette.label` (seen normally) and a duplicate flipped 180° about a local axis to face inward with a white glyph (`FAR_LABEL_COLOR`; local Y in D6/D8/D10/D12/D20, and in D4 `Rz(β)·Rx` — see its section). Through the die the dark outward one is back-face-culled and the inward white one shows, drawn _before_ the body (z-sort) → solid faint number at `(1−α)·|white − page|`, identical for every palette. Far labels carry **`renderOrder = -1`** (painter sort checks `renderOrder` before `z`; near-silhouette faces tie with the body's center z otherwise) and sit slightly _inside_ the body (`FACE_CENTER − 0.2` D8, `center − 0.05·n` D4/D6/D10/D12/D20) so depth culling hides them when `translucent=false`
 - Near labels in D4/D6/D8/D10/D12/D20 carry **`renderOrder = 1`** (drawn after the body): with the default 0 they're z-sorted _before_ the translucent body whenever their world position sits behind the die center and get overdrawn to a ~13% ghost (numbers "disappearing" at oblique drag angles, reappearing past a threshold)
-- The scene rebuilds on color/opacity change (`useEffect` deps `[color, translucent, meshRef, rotationRef, cancelAnimation]` — see Interaction driver) — every die must re-apply `mesh.rotation.set(rotationRef.current.x * degrees, …)` right after the mesh is created (D4/D6 pattern) so the pose survives the remount; without it the die teleports to identity while the hint still shows the rolled value
-- The WebGL renderer/canvas is a **shared singleton** (`acquireThree`/`releaseThree` in `src/utils/threeCanvas.ts`): one context for the whole session — a die switch reparents the same canvas into the incoming stage (`mount.appendChild`) instead of creating/losing a context, so fast `s` cycling can't present an unproven fresh context (white flash). `releaseThree` defers destroy (`setTimeout(0)` → `dispose()` + `forceContextLoss()`) so a same-flush reacquire — normal switch or StrictMode remount — keeps the same canvas. Per-mount effect (deps `[]`): acquire → `ResizeObserver` + resize → draw detached → **session-first attach** (`claimFirstAttach()`) waits for `gl.finish()` before `appendChild` (an initializing context can present white at its first composite; later mounts attach immediately) → rAF loop (reads `sceneRef.current`); cleanup: `canvas.remove()` → disconnect → cancel rAF → release. First paint is dark via inline `html{background:#292929}` in `index.html` — bundled CSS arrives after the initial paint (CSS is JS-injected in dev), which would flash a full-page white. The scene effect swaps only scene contents and sets `sceneRef`/`meshRef`; rebuild cleanup: `cancelAnimation()` (driver-owned roll rAF) → dispose geometry/material/labels → null `meshRef`/`sceneRef`
+- The scene rebuilds on color/opacity change via `useThreeStage`'s rebuild effect (deps `[color, translucent, meshRef, rotationRef, cancelAnimation]` — see Scene/mount stage hook) — the hook applies `mesh.rotation.set(rotationRef.current.x * degrees, …)` to the `buildMesh` result, so the pose survives the remount; without it the die teleports to identity while the hint still shows the rolled value
+- The WebGL renderer/canvas is a **shared singleton** (`acquireThree`/`releaseThree` in `src/utils/threeCanvas.ts`): one context for the whole session — a die switch reparents the same canvas into the incoming stage (`mount.appendChild`) instead of creating/losing a context, so fast `s` cycling can't present an unproven fresh context (white flash). `releaseThree` defers destroy (`setTimeout(0)` → `dispose()` + `forceContextLoss()`) so a same-flush reacquire — normal switch or StrictMode remount — keeps the same canvas. Per-mount effect (deps `[]`): acquire → `ResizeObserver` + resize → draw detached → **session-first attach** (`claimFirstAttach()`) waits for `gl.finish()` before `appendChild` (an initializing context can present white at its first composite; later mounts attach immediately) → rAF loop (reads `sceneRef.current`); cleanup: `canvas.remove()` → disconnect → cancel rAF → release — both effects (mount + scene rebuild) now live in `useThreeStage` (see Scene/mount stage hook). First paint is dark via inline `html{background:#292929}` in `index.html` — bundled CSS arrives after the initial paint (CSS is JS-injected in dev), which would flash a full-page white. The scene effect swaps only scene contents and sets `sceneRef`/`meshRef`; rebuild cleanup: `cancelAnimation()` (driver-owned roll rAF) → dispose geometry/material/labels → null `meshRef`/`sceneRef`
 
 ## Roll animation (`src/utils/rollAnimation.ts`)
 
@@ -54,15 +54,32 @@ The drag/roll/animate block that all six dice share lives here; each die only pa
 - Owns, identical across dice: constants `MAX_TILT_DEG` 65, `ROLL_THRESHOLD` 0.5, `SPIN_TURNS` 10, `SPIN_MS` 1500, `SETTLE_MS` 750, `SNAP_BACK_MS` 260, exported `degrees`; `Rotation` (exported), `DragState`, `clamp`, `rotationFromQuaternion`; the interaction refs/state and the 7 callbacks (`setRotation`, `animateTo`, `animateQuaternion`, `roll`, pointer down/move/up)
 - Per-die config: `fetchRoll: () => fetchDiceRoll(4|6|8|10|12|20)` (the `rollDice` overloads keep the narrow value type through `V extends number`); `resolveTarget` = the die's landing resolver — D4 `restingOrientationForFace(FACE_TO_NUMBER.indexOf(value))`, D6/D8 `uprightOrientationForFace(FACE_BASES[value - 1])`, D10/D12/D20 `uprightOrientationForFace(FACE_BASES[FACE_TO_NUMBER.indexOf(value)])`; only D4 passes `initialRotation: INITIAL_ROTATION`, the rest default to zeros
 - `roll` reads `fetchRoll`/`resolveTarget` through `optionsRef` (latest-ref), so its deps stay `[animateQuaternion, animateTo]` — the inline config arrows get a fresh identity every render without churning `roll`/`handlePointerUp`
-- Each die keeps only `mountRef`/`sceneRef`/`renderFrameRef`; the handlers are renamed at destructure (`onPointerDown: handlePointerDown`, …) so the JSX is unchanged, and `degrees` is still imported for the scene effect's pose lines
-- Scene-rebuild cleanup calls the returned `cancelAnimation()` (stable `useCallback([])` — the roll rAF is hook-owned) and the effect deps are `[color, translucent, meshRef, rotationRef, cancelAnimation]`: hook-returned values are not `useRef`-declared in the component, so `react-hooks/exhaustive-deps` requires them listed (stable identities → no extra rebuilds), and a cleanup that reads a foreign `ref.current` directly warns
+- Each die keeps only JSX + the two hook calls; the handlers are renamed at destructure (`onPointerDown: handlePointerDown`, …) so the JSX is unchanged; `mountRef` comes from the stage hook, and only D4 still imports `degrees` (for its `LABEL_BETA_DEG` table)
+- The stage hook's scene-rebuild cleanup calls the returned `cancelAnimation()` (stable `useCallback([])` — the roll rAF is hook-owned) and the effect deps are `[color, translucent, meshRef, rotationRef, cancelAnimation]`: hook-returned values are not `useRef`-declared in the component, so `react-hooks/exhaustive-deps` requires them listed (stable identities → no extra rebuilds), and a cleanup that reads a foreign `ref.current` directly warns
 
 Invariants (do not regress):
 
 - `roll` deps stay exactly `[animateQuaternion, animateTo]`; timings/tilt stay 1500/750/260 ms, threshold 0.5, `MAX_TILT_DEG` 65, `SPIN_TURNS` 10
 - D4's `initialRotation` must initialise both `rotationRef` and `restRef` — otherwise the die starts at identity (no point-forward start) and snap-back targets the wrong pose
 - Each die's `resolveTarget` stays its own landing rule (D4 rest-face-down vs the upright twist; D6/D8 `value − 1` vs the `FACE_TO_NUMBER.indexOf` dice)
-- The scene effect re-applies `rotationRef` on every rebuild (Rendering & labels) — the ref comes from the hook now, the rule is unchanged
+- The stage hook re-applies `rotationRef` to the built mesh on every rebuild (Scene/mount stage hook) — the ref comes from the interaction driver, the rule is unchanged
+
+## Scene/mount stage hook (`src/components/Dice/hooks/useThreeStage.ts`)
+
+The scene-rebuild + mount lifecycle block that all six dice share lives here; each die only supplies its mesh construction.
+
+- API: `useThreeStage({ color, translucent, meshRef, rotationRef, cancelAnimation, buildMesh })` → `{ mountRef }` — the first three/`cancelAnimation` come from `useDiceInteraction` and are passed straight through
+- Owns the **scene-rebuild effect**: opens the scene, resolves `palette`/`opacity` via `COLOR_PALETTES`/`resolveOpacity`, calls `buildMesh({ palette, opacity, translucent })`, applies `mesh.rotation.set(rotationRef.current.x * degrees, …)` to the built mesh (pose survives the remount), adds the three lights (ambient/hemi/dir 1.0), assigns `sceneRef`/`meshRef`; cleanup: `cancelAnimation()` → dispose geometry/material/every direct-child label plane (geometry + texture + material) → null refs; deps `[color, translucent, meshRef, rotationRef, cancelAnimation]`
+- Owns the **mount effect** verbatim (deps `[]`): threeCanvas singleton acquire → `ResizeObserver` + resize → detached draw → `claimFirstAttach()` gl.finish gate → rAF loop; cleanup: `canvas.remove()` → disconnect → cancel rAF → release — see Rendering & labels for the singleton rationale
+- Internal `mountRef`/`sceneRef`/`renderFrameRef`; `buildMesh` is read via a latest-ref (`buildRef.current = buildMesh` each render) so inline arrows don't churn the scene effect — same pattern as the driver's `optionsRef`
+- Per die: `buildMesh` = geometry + material + labels moved verbatim from the old scene effect, `return mesh` (the hook adds it to the scene); D6 pips attach synchronously (`addLabels()`), the other five are font-gated (`void document.fonts.load('700 Npx dice-font').then(addLabels)`); D8's material is its own (roughness 0.46 / metalness 0.08 / `flatShading: true`)
+- The scene-rebuild effect is declared before the mount effect so it runs first on mount (scene swap → canvas attach)
+
+Invariants (do not regress):
+
+- Scene effect deps stay exactly `[color, translucent, meshRef, rotationRef, cancelAnimation]`; mount deps `[]` — the driver's values are stable `useRef`/`useCallback` identities, so no extra rebuilds
+- `buildMesh` must **return** the mesh (not add it to a scene) and must not set `mesh.rotation` — the hook's pose line overwrites it right after; pose, lights, refs, and dispose are the hook's job
+- `buildMesh` must only add labels as direct `THREE.Mesh` children of the returned mesh — cleanup disposes geometry, material, and each direct-child label plane; a nested group would leak
 
 ## Die sizing (`src/components/Dice/*.scss`)
 
@@ -100,7 +117,7 @@ Invariants (do not regress):
 - Per-face baked normals + `flatShading: false` (prevents diagonal creases on multi-triangle faces)
 - `computeFaceNormal` flips to outward via center dot
 - `FACE_BASES` length = `FACE_TO_NUMBER.length` (numbered faces only)
-- D8 lighting neutral (any color works); D10 ambient/hemi/dir all 1.0
+- Lighting neutral (any color works): ambient/hemi/dir all 1.0, owned by `useThreeStage` (per-die dice no longer add lights)
 - Side faces are planar: `RING_Y = POLE_Y × 0.105573` (kite planarity ratio); truncation preserves planarity — non-planar faces fold, cull triangles (holes), and swallow labels (measured deviation 0.357 vs 0.01 label offset)
 
 Future tunables:
@@ -115,7 +132,7 @@ Design:
 - Regular dodecahedron: 12 planar pentagons, no truncation/squash; circumradius 1.7 (matches the D8/D10 silhouette); 20 hard-coded vertices (φ construction × 1.7/√3), `FACES` CCW-from-outside
 - `FACE_TO_NUMBER` = `[1, 2, 3, 4, 5, 6, 8, 7, 9, 10, 11, 12]` — **opposite faces sum to 13**; roll resolves `FACE_TO_NUMBER.indexOf(value)`
 - Two-digit labels (10–12): canvas font `700 160px` on 256px, `LABEL_SIZE` 1.0 (worst-case inscribed square across all face orientations ≈ 1.195)
-- Builder, material, lights, and label offsets follow D10 (auto-winding fan, baked normals + `flatShading: false`, roughness 0.4, lights 1.0, near `+0.01·n` / far `−0.05·n`)
+- Builder, material, and label offsets follow D10 (auto-winding fan, baked normals + `flatShading: false`, roughness 0.4, near `+0.01·n` / far `−0.05·n`)
 
 Invariants (do not regress):
 
@@ -132,7 +149,7 @@ Design:
 - `FACE_TO_NUMBER` = `[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 11, 13, 14, 16, 15, 18, 17, 19, 20]` — **opposite faces sum to 21**; roll resolves `FACE_TO_NUMBER.indexOf(value)`
 - `LABEL_SIZE` 0.9 (10% smaller than D12), canvas font `700 160px` — glyph-fit limit over all 20 face orientations ≈ 1.14, so 0.9 fits with margin; the transparent plane corners may overhang the triangle (painted digits stay inside, as on D8)
 - Lands via the shared `uprightOrientationForFace` twist (bare arc would land `1`/`2` upside down and ten faces at ±15°/±20.9°/±75°)
-- Builder, material, lights, and label offsets follow D12
+- Builder, material, and label offsets follow D12
 
 Invariants (do not regress):
 
@@ -151,13 +168,13 @@ Design:
 - **Landing = rest face DOWN** (hidden, apex up — the number "sits on the table"; do NOT face the rolled camera like other dice): `restingOrientationForFace(r)` = minimal-arc `n_r → (0, −1, 0)`, then world-Y rotation by `−atan2(x, z)` of the displayed front face normal, front face = `(r + 1) % 4` (bijection → each face has exactly one display orientation)
 - Result label settles at world `(0, −0.283, 0.701)` and reads upright. **Near labels use only the natural basis** (local up = face centre − edge midpoint, no per-label β): digits are edge-aligned with their top toward the face centre — bottom-read — so the result lands upright and the other two numbers on the displayed face stay upside down. **Far twins** (through-body copies) apply the `LABEL_BETA_DEG` table (β = 0° at result positions 2/4/6/9, 180° elsewhere) then flip in-plane about local **X** (`far = orientation·Rz(β)·Rx(π)`) — at settle the rolled value's through-body side copies read upright. Orientation is face-intrinsic (a property of the pane, not the view) — no screen-space solve
 - `LABEL_SIZE` 0.8 (clear of the edges; edge clearance at `u = 0.625` ≈ 0.12), font `700 160px`; digit fit and far-twin containment both verified at `u = 0.625` — near digits ≥ 0.18 (glyph radius) from every hexagon edge (min 0.30), far digits (flat disc on the `pos − 0.05·n` plane) inside all 8 chamfer planes (own plane −0.05, cut planes ≥ −1.06)
-- **Initial (pre-roll) pose** `INITIAL_ROTATION` = Euler XYZ `(−177.2356°, 55.25°, 45°)` — a vertex ("point") faces the viewer dead centre (≈3° off the camera axis), not identity; the mesh applies `rotationRef` on mount (also on color/opacity remount, so the pose survives a palette change)
+- **Initial (pre-roll) pose** `INITIAL_ROTATION` = Euler XYZ `(−177.2356°, 55.25°, 45°)` — a vertex ("point") faces the viewer dead centre (≈3° off the camera axis), not identity; the stage hook applies `rotationRef` on mount (also on color/opacity remount, so the pose survives a palette change)
 
 Invariants (do not regress):
 
 - `FACES`/`VERTICES` index consistency (winding auto-orients via geo-normal · centre dot); `LABEL_POS`/`LABEL_BETA_DEG` lengths = `FACES.length × 3`
 - `CHAMFER_FACES` = 4 hexagons + 4 corner triangles, hexagons exactly coplanar with their original face (labels/centres/landing math unchanged); labels and roll targets index only the 4 hexagon faces — corner triangles are never labelled or landed
-- The mesh takes its pose from `rotationRef` on mount — never reset to identity (loses the point-facing start view; a color change would also snap the die)
+- The stage hook applies `rotationRef` to the built mesh on mount — never reset to identity (loses the point-facing start view; a color change would also snap the die)
 - Front rule `(r + 1) % 4` must stay a bijection — one display quaternion per face, or the label index mapping (pos + far-β) collides
 - For every value: result label world x = 0 and upright, the other two displayed labels keep the natural basis (digit top toward the face centre — upside down at settle), front face dot-to-camera ≈ 0.943; every far twin = (near orientation)·Rz(β)·Rx(π)
 - Each face shows only the other three values; each value appears exactly 3×
@@ -172,8 +189,8 @@ Design:
 - **Size**: canvas `--die-size: clamp(204px, 48vmin, 376px)` (fov 28, z 7, cube side 2) — measured red-bbox 252×252 @ (514,274) at 1280×800, identical for every landed value
 - Labels: near plane `2 × 2` at `n · 1.01` (`renderOrder = 1`), far plane `1.9 × 1.9` at `n · 0.95`, flipped π about local Y, white, `renderOrder = -1` — far corners `(0.95, 0.95, 0.95)` strictly inside the chamfered solid (corner sum 2.85 ≤ 3 − `CORNER_CUT`, holds for any cut ≤ 0.15) so depth culling hides them when `translucent=false`
 - Rolls use `useDiceInteraction` → `planRoll` (SPIN_TURNS 10) + `uprightOrientationForFace` twist → pips land natural (6 = vertical columns, 2/3 = top-left→bottom-right); timings/threshold are the driver's — 1500/750/260 ms, drag threshold 0.5 measured on the stage
-- The mesh applies `rotationRef` on mount (D4 pattern) — a color/opacity remount keeps the landed pose
-- Material/lights follow D10 (roughness 0.4, metalness 0, `flatShading: false`, ambient/hemi/dir 1.0); `Dice.scss` only holds the shared `.stage`/`.hint` base
+- The stage hook applies `rotationRef` on mount — a color/opacity remount keeps the landed pose
+- Material follows D10 (roughness 0.4, metalness 0, `flatShading: false`); lights are the stage hook's (ambient/hemi/dir 1.0); `Dice.scss` only holds the shared `.stage`/`.hint` base
 
 Invariants (do not regress):
 
@@ -182,7 +199,7 @@ Invariants (do not regress):
 - Identity pose shows 1 front / 2 top / 3 right; opposite faces sum to 7
 - Far-twin containment: plane half-size 0.95 and offset 0.95 both < 1, and corner sum 2.85 ≤ 3 − `CORNER_CUT` (cut ≤ 0.15)
 - Near labels `renderOrder = 1`, far `= -1` (shared bullets) — otherwise pips vanish at oblique drag angles / far twins bleed through in opaque mode
-- Pose survives color/opacity remount (`rotationRef` applied when the mesh is created)
+- Pose survives color/opacity remount (the stage hook applies `rotationRef` to the built mesh)
 
 ## D8 (`src/components/Dice/EightSidedDice.tsx`)
 

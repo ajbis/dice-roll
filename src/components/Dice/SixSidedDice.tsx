@@ -1,18 +1,9 @@
-import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { fetchDiceRoll } from '../../utils/rollDice';
-import {
-  acquireThree,
-  claimFirstAttach,
-  releaseThree,
-} from '../../utils/threeCanvas';
-import {
-  COLOR_PALETTES,
-  resolveOpacity,
-  type DiceColor,
-} from '../../utils/settings';
+import type { DiceColor } from '../../utils/settings';
 import DiceHint from './DiceHint';
-import { degrees, useDiceInteraction } from './hooks/useDiceInteraction';
+import { useDiceInteraction } from './hooks/useDiceInteraction';
+import { useThreeStage } from './hooks/useThreeStage';
 import './Dice.scss';
 import './SixSidedDice.scss';
 
@@ -251,9 +242,6 @@ export default function SixSidedDice({
   color = 'red',
   translucent = true,
 }: SixSidedDiceProps) {
-  const mountRef = useRef<HTMLDivElement | null>(null);
-  const sceneRef = useRef<THREE.Scene | null>(null);
-  const renderFrameRef = useRef<number | null>(null);
   const {
     meshRef,
     rotationRef,
@@ -270,165 +258,90 @@ export default function SixSidedDice({
     resolveTarget: (value) => uprightOrientationForFace(FACE_BASES[value - 1]),
   });
 
-  useEffect(() => {
-    const scene = new THREE.Scene();
+  const { mountRef } = useThreeStage({
+    color,
+    translucent,
+    meshRef,
+    rotationRef,
+    cancelAnimation,
+    buildMesh: ({ palette, opacity, translucent }) => {
+      const geometry = new THREE.BufferGeometry();
+      const positions: number[] = [];
+      const normals: number[] = [];
 
-    const geometry = new THREE.BufferGeometry();
-    const positions: number[] = [];
-    const normals: number[] = [];
+      for (const face of CHAMFER_FACES) {
+        const center = computeFaceCenter(face);
+        const normal = computeFaceNormal(face, center);
+        const nx = normal.x;
+        const ny = normal.y;
+        const nz = normal.z;
 
-    for (const face of CHAMFER_FACES) {
-      const center = computeFaceCenter(face);
-      const normal = computeFaceNormal(face, center);
-      const nx = normal.x;
-      const ny = normal.y;
-      const nz = normal.z;
+        const [a, b, c] = face;
+        const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]] as const;
+        const ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]] as const;
+        const geoNx = ab[1] * ac[2] - ab[2] * ac[1];
+        const geoNy = ab[2] * ac[0] - ab[0] * ac[2];
+        const geoNz = ab[0] * ac[1] - ab[1] * ac[0];
+        const outward =
+          geoNx * center.x + geoNy * center.y + geoNz * center.z >= 0;
+        const ordered = outward ? face : [...face].reverse();
 
-      const [a, b, c] = face;
-      const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]] as const;
-      const ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]] as const;
-      const geoNx = ab[1] * ac[2] - ab[2] * ac[1];
-      const geoNy = ab[2] * ac[0] - ab[0] * ac[2];
-      const geoNz = ab[0] * ac[1] - ab[1] * ac[0];
-      const outward =
-        geoNx * center.x + geoNy * center.y + geoNz * center.z >= 0;
-      const ordered = outward ? face : [...face].reverse();
-
-      for (let i = 1; i < ordered.length - 1; i++) {
-        positions.push(...ordered[0], ...ordered[i], ...ordered[i + 1]);
-        normals.push(nx, ny, nz, nx, ny, nz, nx, ny, nz);
+        for (let i = 1; i < ordered.length - 1; i++) {
+          positions.push(...ordered[0], ...ordered[i], ...ordered[i + 1]);
+          normals.push(nx, ny, nz, nx, ny, nz, nx, ny, nz);
+        }
       }
-    }
 
-    geometry.setAttribute(
-      'position',
-      new THREE.Float32BufferAttribute(positions, 3),
-    );
-    geometry.setAttribute(
-      'normal',
-      new THREE.Float32BufferAttribute(normals, 3),
-    );
+      geometry.setAttribute(
+        'position',
+        new THREE.Float32BufferAttribute(positions, 3),
+      );
+      geometry.setAttribute(
+        'normal',
+        new THREE.Float32BufferAttribute(normals, 3),
+      );
 
-    const palette = COLOR_PALETTES[color];
-    const opacity = resolveOpacity(translucent);
+      const mesh = new THREE.Mesh(
+        geometry,
+        new THREE.MeshStandardMaterial({
+          color: palette.hex,
+          roughness: 0.4,
+          metalness: 0.0,
+          flatShading: false,
+          transparent: translucent,
+          opacity,
+          depthWrite: !translucent,
+        }),
+      );
+      const labelFlip = new THREE.Quaternion().setFromAxisAngle(
+        new THREE.Vector3(0, 1, 0),
+        Math.PI,
+      );
 
-    const mesh = new THREE.Mesh(
-      geometry,
-      new THREE.MeshStandardMaterial({
-        color: palette.hex,
-        roughness: 0.4,
-        metalness: 0.0,
-        flatShading: false,
-        transparent: translucent,
-        opacity,
-        depthWrite: !translucent,
-      }),
-    );
-    // Start (and remount on color/opacity change) from the current pose.
-    mesh.rotation.set(
-      rotationRef.current.x * degrees,
-      rotationRef.current.y * degrees,
-      rotationRef.current.z * degrees,
-    );
+      const addLabels = () => {
+        FACE_BASES.forEach((face, index) => {
+          const value = (index + 1) as FaceValue;
+          const label = createPipLabel(value, palette.label, NEAR_SIZE);
+          if (!label) return;
+          label.position.copy(face.normal).multiplyScalar(NEAR_DISTANCE);
+          label.quaternion.copy(face.orientation);
+          label.renderOrder = 1;
+          mesh.add(label);
 
-    const labelFlip = new THREE.Quaternion().setFromAxisAngle(
-      new THREE.Vector3(0, 1, 0),
-      Math.PI,
-    );
+          const far = createPipLabel(value, FAR_LABEL_COLOR, FAR_SIZE);
+          if (!far) return;
+          far.renderOrder = -1;
+          far.position.copy(face.normal).multiplyScalar(FAR_DISTANCE);
+          far.quaternion.copy(face.orientation).multiply(labelFlip);
+          mesh.add(far);
+        });
+      };
 
-    const addLabels = () => {
-      FACE_BASES.forEach((face, index) => {
-        const value = (index + 1) as FaceValue;
-        const label = createPipLabel(value, palette.label, NEAR_SIZE);
-        if (!label) return;
-        label.position.copy(face.normal).multiplyScalar(NEAR_DISTANCE);
-        label.quaternion.copy(face.orientation);
-        label.renderOrder = 1;
-        mesh.add(label);
+      addLabels();
 
-        const far = createPipLabel(value, FAR_LABEL_COLOR, FAR_SIZE);
-        if (!far) return;
-        far.renderOrder = -1;
-        far.position.copy(face.normal).multiplyScalar(FAR_DISTANCE);
-        far.quaternion.copy(face.orientation).multiply(labelFlip);
-        mesh.add(far);
-      });
-    };
-
-    addLabels();
-
-    scene.add(mesh);
-    scene.add(new THREE.AmbientLight(0xffffff, 1.0));
-    scene.add(new THREE.HemisphereLight(0xffffff, 0xbbbbbb, 1.0));
-    const keyLight = new THREE.DirectionalLight(0xffffff, 1.0);
-    keyLight.position.set(3, 4, 5);
-    scene.add(keyLight);
-
-    meshRef.current = mesh;
-    sceneRef.current = scene;
-
-    return () => {
-      cancelAnimation();
-      mesh.geometry.dispose();
-      (mesh.material as THREE.Material).dispose();
-      mesh.children.forEach((child) => {
-        const label = child as THREE.Mesh<
-          THREE.PlaneGeometry,
-          THREE.MeshBasicMaterial
-        >;
-        label.geometry.dispose();
-        label.material.map?.dispose();
-        label.material.dispose();
-      });
-      meshRef.current = null;
-      sceneRef.current = null;
-    };
-  }, [color, translucent, meshRef, rotationRef, cancelAnimation]);
-
-  // Shared canvas/context (threeCanvas singleton): die switches reparent the
-  // same canvas into the incoming stage instead of creating a context per
-  // mount — per-mount contexts race the GPU process on fast switches and can
-  // present white before their first frame lands. Scene contents come from
-  // the rebuild effect above; the first draw happens while detached.
-  useEffect(() => {
-    const mount = mountRef.current;
-    if (!mount) return;
-
-    const { renderer, camera } = acquireThree();
-
-    const resize = () => {
-      const width = mount.clientWidth;
-      const height = mount.clientHeight;
-      renderer.setSize(width, height, false);
-      camera.aspect = width / height;
-      camera.updateProjectionMatrix();
-    };
-    const resizeObserver = new ResizeObserver(resize);
-    resizeObserver.observe(mount);
-    resize();
-
-    if (sceneRef.current) renderer.render(sceneRef.current, camera);
-    if (claimFirstAttach()) {
-      // Fresh context: keep the canvas out of the DOM until the GPU has
-      // completed the first frame — an initializing context can present
-      // white at its first composite.
-      renderer.getContext().finish();
-    }
-    mount.appendChild(renderer.domElement);
-
-    const render = () => {
-      renderFrameRef.current = requestAnimationFrame(render);
-      if (sceneRef.current) renderer.render(sceneRef.current, camera);
-    };
-    render();
-
-    return () => {
-      renderer.domElement.remove();
-      resizeObserver.disconnect();
-      if (renderFrameRef.current) cancelAnimationFrame(renderFrameRef.current);
-      releaseThree();
-    };
-  }, []);
+      return mesh;
+    },
+  });
 
   return (
     <div

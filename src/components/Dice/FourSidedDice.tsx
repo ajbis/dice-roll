@@ -1,22 +1,13 @@
-import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { fetchDiceRoll } from '../../utils/rollDice';
-import {
-  acquireThree,
-  claimFirstAttach,
-  releaseThree,
-} from '../../utils/threeCanvas';
-import {
-  COLOR_PALETTES,
-  resolveOpacity,
-  type DiceColor,
-} from '../../utils/settings';
+import type { DiceColor } from '../../utils/settings';
 import DiceHint from './DiceHint';
 import {
   degrees,
   useDiceInteraction,
   type Rotation,
 } from './hooks/useDiceInteraction';
+import { useThreeStage } from './hooks/useThreeStage';
 import './FourSidedDice.scss';
 
 type FaceValue = 1 | 2 | 3 | 4;
@@ -236,9 +227,6 @@ export default function FourSidedDice({
   color = 'red',
   translucent = true,
 }: FourSidedDiceProps) {
-  const mountRef = useRef<HTMLDivElement | null>(null);
-  const sceneRef = useRef<THREE.Scene | null>(null);
-  const renderFrameRef = useRef<number | null>(null);
   const {
     meshRef,
     rotationRef,
@@ -257,200 +245,128 @@ export default function FourSidedDice({
     initialRotation: INITIAL_ROTATION,
   });
 
-  useEffect(() => {
-    const scene = new THREE.Scene();
+  const { mountRef } = useThreeStage({
+    color,
+    translucent,
+    meshRef,
+    rotationRef,
+    cancelAnimation,
+    buildMesh: ({ palette, opacity, translucent }) => {
+      const geometry = new THREE.BufferGeometry();
+      const vertices: number[] = [];
+      const normals: number[] = [];
 
-    const geometry = new THREE.BufferGeometry();
-    const vertices: number[] = [];
-    const normals: number[] = [];
+      for (const face of CHAMFER_FACES) {
+        const faceVerts = face;
+        const center = computeFaceCenter(faceVerts);
+        const normal = computeFaceNormal(faceVerts, center);
+        const nx = normal.x;
+        const ny = normal.y;
+        const nz = normal.z;
 
-    for (const face of CHAMFER_FACES) {
-      const faceVerts = face;
-      const center = computeFaceCenter(faceVerts);
-      const normal = computeFaceNormal(faceVerts, center);
-      const nx = normal.x;
-      const ny = normal.y;
-      const nz = normal.z;
+        const [a, b, c] = faceVerts;
+        const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]] as const;
+        const ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]] as const;
+        const geoNx = ab[1] * ac[2] - ab[2] * ac[1];
+        const geoNy = ab[2] * ac[0] - ab[0] * ac[2];
+        const geoNz = ab[0] * ac[1] - ab[1] * ac[0];
+        const outward =
+          geoNx * center.x + geoNy * center.y + geoNz * center.z >= 0;
+        const ordered = outward ? faceVerts : [...faceVerts].reverse();
 
-      const [a, b, c] = faceVerts;
-      const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]] as const;
-      const ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]] as const;
-      const geoNx = ab[1] * ac[2] - ab[2] * ac[1];
-      const geoNy = ab[2] * ac[0] - ab[0] * ac[2];
-      const geoNz = ab[0] * ac[1] - ab[1] * ac[0];
-      const outward =
-        geoNx * center.x + geoNy * center.y + geoNz * center.z >= 0;
-      const ordered = outward ? faceVerts : [...faceVerts].reverse();
-
-      for (let i = 1; i < ordered.length - 1; i++) {
-        vertices.push(...ordered[0], ...ordered[i], ...ordered[i + 1]);
-        normals.push(nx, ny, nz, nx, ny, nz, nx, ny, nz);
-      }
-    }
-
-    geometry.setAttribute(
-      'position',
-      new THREE.Float32BufferAttribute(vertices, 3),
-    );
-    geometry.setAttribute(
-      'normal',
-      new THREE.Float32BufferAttribute(normals, 3),
-    );
-
-    const palette = COLOR_PALETTES[color];
-    const opacity = resolveOpacity(translucent);
-
-    const mesh = new THREE.Mesh(
-      geometry,
-      new THREE.MeshStandardMaterial({
-        color: palette.hex,
-        roughness: 0.4,
-        metalness: 0.0,
-        flatShading: false,
-        transparent: translucent,
-        opacity,
-        depthWrite: !translucent,
-      }),
-    );
-    // Start (and remount on color/opacity change) from the current pose.
-    mesh.rotation.set(
-      rotationRef.current.x * degrees,
-      rotationRef.current.y * degrees,
-      rotationRef.current.z * degrees,
-    );
-
-    // Far-twin in-plane flip about local X: faces inward (normal −n) and,
-    // combined with the beta phase below, renders every through-body copy
-    // 180° rotated from the pre-fix layout.
-    const labelFlip = new THREE.Quaternion().setFromAxisAngle(
-      new THREE.Vector3(1, 0, 0),
-      Math.PI,
-    );
-
-    const addLabels = () => {
-      FACE_GEOM.forEach(({ normal, center }, faceIndex) => {
-        for (let edge = 0; edge < 3; edge++) {
-          const tableIndex = faceIndex * 3 + edge;
-          const value = labelValue(faceIndex, edge);
-          const a = FACES[faceIndex][edge];
-          const b = FACES[faceIndex][(edge + 1) % 3];
-          const mid = new THREE.Vector3()
-            .addVectors(
-              new THREE.Vector3(...VERTICES[a]),
-              new THREE.Vector3(...VERTICES[b]),
-            )
-            .multiplyScalar(0.5);
-          const up = center.clone().sub(mid).normalize();
-          const right = new THREE.Vector3().crossVectors(up, normal);
-          const orientation = new THREE.Quaternion().setFromRotationMatrix(
-            new THREE.Matrix4().makeBasis(right, up, normal),
-          );
-          const beta = new THREE.Quaternion().setFromAxisAngle(
-            new THREE.Vector3(0, 0, 1),
-            LABEL_BETA_DEG[tableIndex] * degrees,
-          );
-
-          const near = createLabel(value, palette.label);
-          if (near) {
-            // Drawn after the body (renderOrder 1): a near label whose world
-            // position sits behind the die centre would otherwise sort before
-            // the translucent body and be overdrawn to a 13% ghost at certain
-            // drag angles — numbers "disappearing" on non-front sides.
-            near.renderOrder = 1;
-            near.position
-              .copy(new THREE.Vector3(...LABEL_POS[tableIndex]))
-              .addScaledVector(normal, 0.01);
-            near.quaternion.copy(orientation);
-            mesh.add(near);
-          }
-
-          const far = createLabel(value, FAR_LABEL_COLOR);
-          if (far) {
-            far.renderOrder = -1;
-            far.position
-              .copy(new THREE.Vector3(...LABEL_POS[tableIndex]))
-              .addScaledVector(normal, -0.05);
-            far.quaternion.copy(orientation).multiply(beta).multiply(labelFlip);
-            mesh.add(far);
-          }
+        for (let i = 1; i < ordered.length - 1; i++) {
+          vertices.push(...ordered[0], ...ordered[i], ...ordered[i + 1]);
+          normals.push(nx, ny, nz, nx, ny, nz, nx, ny, nz);
         }
-      });
-    };
+      }
 
-    void document.fonts.load('700 160px dice-font').then(addLabels);
+      geometry.setAttribute(
+        'position',
+        new THREE.Float32BufferAttribute(vertices, 3),
+      );
+      geometry.setAttribute(
+        'normal',
+        new THREE.Float32BufferAttribute(normals, 3),
+      );
 
-    scene.add(mesh);
-    scene.add(new THREE.AmbientLight(0xffffff, 1.0));
-    scene.add(new THREE.HemisphereLight(0xffffff, 0xbbbbbb, 1.0));
-    const keyLight = new THREE.DirectionalLight(0xffffff, 1.0);
-    keyLight.position.set(3, 4, 5);
-    scene.add(keyLight);
+      const mesh = new THREE.Mesh(
+        geometry,
+        new THREE.MeshStandardMaterial({
+          color: palette.hex,
+          roughness: 0.4,
+          metalness: 0.0,
+          flatShading: false,
+          transparent: translucent,
+          opacity,
+          depthWrite: !translucent,
+        }),
+      );
+      // Far-twin in-plane flip about local X: faces inward (normal −n) and,
+      // combined with the beta phase below, renders every through-body copy
+      // 180° rotated from the pre-fix layout.
+      const labelFlip = new THREE.Quaternion().setFromAxisAngle(
+        new THREE.Vector3(1, 0, 0),
+        Math.PI,
+      );
 
-    meshRef.current = mesh;
-    sceneRef.current = scene;
+      const addLabels = () => {
+        FACE_GEOM.forEach(({ normal, center }, faceIndex) => {
+          for (let edge = 0; edge < 3; edge++) {
+            const tableIndex = faceIndex * 3 + edge;
+            const value = labelValue(faceIndex, edge);
+            const a = FACES[faceIndex][edge];
+            const b = FACES[faceIndex][(edge + 1) % 3];
+            const mid = new THREE.Vector3()
+              .addVectors(
+                new THREE.Vector3(...VERTICES[a]),
+                new THREE.Vector3(...VERTICES[b]),
+              )
+              .multiplyScalar(0.5);
+            const up = center.clone().sub(mid).normalize();
+            const right = new THREE.Vector3().crossVectors(up, normal);
+            const orientation = new THREE.Quaternion().setFromRotationMatrix(
+              new THREE.Matrix4().makeBasis(right, up, normal),
+            );
+            const beta = new THREE.Quaternion().setFromAxisAngle(
+              new THREE.Vector3(0, 0, 1),
+              LABEL_BETA_DEG[tableIndex] * degrees,
+            );
 
-    return () => {
-      cancelAnimation();
-      geometry.dispose();
-      (mesh.material as THREE.Material).dispose();
-      mesh.children.forEach((child) => {
-        const label = child as THREE.Mesh<
-          THREE.PlaneGeometry,
-          THREE.MeshBasicMaterial
-        >;
-        label.geometry.dispose();
-        label.material.map?.dispose();
-        label.material.dispose();
-      });
-      meshRef.current = null;
-      sceneRef.current = null;
-    };
-  }, [color, translucent, meshRef, rotationRef, cancelAnimation]);
+            const near = createLabel(value, palette.label);
+            if (near) {
+              // Drawn after the body (renderOrder 1): a near label whose world
+              // position sits behind the die centre would otherwise sort before
+              // the translucent body and be overdrawn to a 13% ghost at certain
+              // drag angles — numbers "disappearing" on non-front sides.
+              near.renderOrder = 1;
+              near.position
+                .copy(new THREE.Vector3(...LABEL_POS[tableIndex]))
+                .addScaledVector(normal, 0.01);
+              near.quaternion.copy(orientation);
+              mesh.add(near);
+            }
 
-  // Shared canvas/context (threeCanvas singleton): die switches reparent the
-  // same canvas into the incoming stage instead of creating a context per
-  // mount — per-mount contexts race the GPU process on fast switches and can
-  // present white before their first frame lands. Scene contents come from
-  // the rebuild effect above; the first draw happens while detached.
-  useEffect(() => {
-    const mount = mountRef.current;
-    if (!mount) return;
+            const far = createLabel(value, FAR_LABEL_COLOR);
+            if (far) {
+              far.renderOrder = -1;
+              far.position
+                .copy(new THREE.Vector3(...LABEL_POS[tableIndex]))
+                .addScaledVector(normal, -0.05);
+              far.quaternion
+                .copy(orientation)
+                .multiply(beta)
+                .multiply(labelFlip);
+              mesh.add(far);
+            }
+          }
+        });
+      };
 
-    const { renderer, camera } = acquireThree();
+      void document.fonts.load('700 160px dice-font').then(addLabels);
 
-    const resize = () => {
-      const width = mount.clientWidth;
-      const height = mount.clientHeight;
-      renderer.setSize(width, height, false);
-      camera.aspect = width / height;
-      camera.updateProjectionMatrix();
-    };
-    const resizeObserver = new ResizeObserver(resize);
-    resizeObserver.observe(mount);
-    resize();
-
-    if (sceneRef.current) renderer.render(sceneRef.current, camera);
-    if (claimFirstAttach()) {
-      // Fresh context: keep the canvas out of the DOM until the GPU has
-      // completed the first frame — an initializing context can present
-      // white at its first composite.
-      renderer.getContext().finish();
-    }
-    mount.appendChild(renderer.domElement);
-
-    const render = () => {
-      renderFrameRef.current = requestAnimationFrame(render);
-      if (sceneRef.current) renderer.render(sceneRef.current, camera);
-    };
-    render();
-
-    return () => {
-      renderer.domElement.remove();
-      resizeObserver.disconnect();
-      if (renderFrameRef.current) cancelAnimationFrame(renderFrameRef.current);
-      releaseThree();
-    };
-  }, []);
+      return mesh;
+    },
+  });
 
   return (
     <div

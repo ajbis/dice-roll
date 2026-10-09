@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { durableLabelTexture } from '../../utils/labelTexture';
 import { fetchDiceRoll } from '../../utils/rollDice';
 import type { DiceColor } from '../../utils/settings';
 import DiceHint from './DiceHint';
@@ -154,8 +155,7 @@ const createLabel = (value: FaceValue, labelColor: string) => {
   context.fillStyle = labelColor;
   context.fillText(String(value === 10 ? 0 : value), 128, 136);
 
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
+  const texture = durableLabelTexture(canvas);
   const material = new THREE.MeshBasicMaterial({
     map: texture,
     transparent: true,

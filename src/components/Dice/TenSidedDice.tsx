@@ -5,11 +5,11 @@ import {
   faceBasisForPolygon,
   uprightOrientationForFace,
 } from '../../utils/diceGeometry';
-import { durableLabelTexture } from '../../utils/labelTexture';
-import type { DiceColor } from '../../utils/settings';
+import { createDigitLabel } from '../../utils/digitLabel';
 import DiceHint from './DiceHint';
 import { useDiceInteraction } from './hooks/useDiceInteraction';
 import { useThreeStage } from './hooks/useThreeStage';
+import type { DiceStageProps } from './types';
 import './TenSidedDice.scss';
 
 type FaceValue = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
@@ -82,43 +82,18 @@ const FACE_BASES = Array.from({ length: FACE_TO_NUMBER.length }, (_, i) =>
 
 const FAR_LABEL_COLOR = '#ffffff';
 
-const createLabel = (value: FaceValue, labelColor: string) => {
-  const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 256;
-  const context = canvas.getContext('2d');
-
-  if (!context) return null;
-
-  context.font = '700 180px dice-font, system-ui, sans-serif';
-  context.textAlign = 'center';
-  context.textBaseline = 'middle';
-  context.fillStyle = labelColor;
-  context.fillText(String(value === 10 ? 0 : value), 128, 136);
-
-  const texture = durableLabelTexture(canvas);
-  const material = new THREE.MeshBasicMaterial({
-    map: texture,
-    transparent: true,
-    side: THREE.FrontSide,
-    depthWrite: false,
+const createLabel = (value: FaceValue, labelColor: string) =>
+  createDigitLabel({
+    text: String(value === 10 ? 0 : value),
+    fontPx: 180,
+    color: labelColor,
+    planeSize: LABEL_SIZE,
   });
-  const label = new THREE.Mesh(
-    new THREE.PlaneGeometry(LABEL_SIZE, LABEL_SIZE),
-    material,
-  );
-  return label;
-};
-
-type TenSidedDiceProps = {
-  color?: DiceColor;
-  translucent?: boolean;
-};
 
 export default function TenSidedDice({
   color = 'red',
   translucent = true,
-}: TenSidedDiceProps) {
+}: DiceStageProps) {
   const {
     meshRef,
     rotationRef,

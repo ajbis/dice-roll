@@ -4,15 +4,11 @@ import EightSidedDice from './EightSidedDice';
 import TenSidedDice from './TenSidedDice';
 import TwelveSidedDice from './TwelveSidedDice';
 import TwentySidedDice from './TwentySidedDice';
-import type { DiceColor } from '../../utils/settings';
+import type { DiceStageProps } from './types';
 
 export type DiceSides = 4 | 6 | 8 | 10 | 12 | 20;
 
-type DiceProps = {
-  sides?: DiceSides;
-  color?: DiceColor;
-  translucent?: boolean;
-};
+type DiceProps = { sides?: DiceSides } & DiceStageProps;
 
 export default function Dice({
   sides = 6,

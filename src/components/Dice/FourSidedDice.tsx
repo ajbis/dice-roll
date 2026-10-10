@@ -6,8 +6,7 @@ import {
   lerp3,
   type FacePolygon,
 } from '../../utils/diceGeometry';
-import { durableLabelTexture } from '../../utils/labelTexture';
-import type { DiceColor } from '../../utils/settings';
+import { createDigitLabel } from '../../utils/digitLabel';
 import DiceHint from './DiceHint';
 import {
   degrees,
@@ -15,6 +14,7 @@ import {
   type Rotation,
 } from './hooks/useDiceInteraction';
 import { useThreeStage } from './hooks/useThreeStage';
+import type { DiceStageProps } from './types';
 import './FourSidedDice.scss';
 
 type FaceValue = 1 | 2 | 3 | 4;
@@ -164,43 +164,18 @@ const restingOrientationForFace = (faceIndex: number) => {
 
 const FAR_LABEL_COLOR = '#ffffff';
 
-const createLabel = (value: FaceValue, labelColor: string) => {
-  const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 256;
-  const context = canvas.getContext('2d');
-
-  if (!context) return null;
-
-  context.font = '700 160px dice-font, system-ui, sans-serif';
-  context.textAlign = 'center';
-  context.textBaseline = 'middle';
-  context.fillStyle = labelColor;
-  context.fillText(String(value), 128, 136);
-
-  const texture = durableLabelTexture(canvas);
-  const material = new THREE.MeshBasicMaterial({
-    map: texture,
-    transparent: true,
-    side: THREE.FrontSide,
-    depthWrite: false,
+const createLabel = (value: FaceValue, labelColor: string) =>
+  createDigitLabel({
+    text: String(value),
+    fontPx: 160,
+    color: labelColor,
+    planeSize: LABEL_SIZE,
   });
-  const label = new THREE.Mesh(
-    new THREE.PlaneGeometry(LABEL_SIZE, LABEL_SIZE),
-    material,
-  );
-  return label;
-};
-
-type FourSidedDiceProps = {
-  color?: DiceColor;
-  translucent?: boolean;
-};
 
 export default function FourSidedDice({
   color = 'red',
   translucent = true,
-}: FourSidedDiceProps) {
+}: DiceStageProps) {
   const {
     meshRef,
     rotationRef,

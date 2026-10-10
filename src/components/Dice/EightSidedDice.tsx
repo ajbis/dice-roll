@@ -7,11 +7,11 @@ import {
   type FacePolygon,
   uprightOrientationForFace,
 } from '../../utils/diceGeometry';
-import { durableLabelTexture } from '../../utils/labelTexture';
-import type { DiceColor } from '../../utils/settings';
+import { createDigitLabel } from '../../utils/digitLabel';
 import DiceHint from './DiceHint';
 import { useDiceInteraction } from './hooks/useDiceInteraction';
 import { useThreeStage } from './hooks/useThreeStage';
+import type { DiceStageProps } from './types';
 import './EightSidedDice.scss';
 
 type FaceValue = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
@@ -109,45 +109,19 @@ const CHAMFER_FACES = buildChamferedOcta(CORNER_CUT);
 
 const FAR_LABEL_COLOR = '#ffffff';
 
-const createLabel = (value: FaceValue, labelColor: string) => {
-  const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 256;
-  const context = canvas.getContext('2d');
-
-  if (!context) return null;
-
-  context.font = '700 200px dice-font, system-ui, sans-serif';
-  context.textAlign = 'center';
-  context.textBaseline = 'middle';
-  context.fillStyle = labelColor;
-  context.shadowColor = 'rgba(0, 0, 0, 0.35)';
-  context.shadowBlur = 6;
-  context.fillText(String(value), 128, 136);
-
-  const texture = durableLabelTexture(canvas);
-  const material = new THREE.MeshBasicMaterial({
-    map: texture,
-    transparent: true,
-    side: THREE.FrontSide,
-    depthWrite: false,
+const createLabel = (value: FaceValue, labelColor: string) =>
+  createDigitLabel({
+    text: String(value),
+    fontPx: 200,
+    shadow: { color: 'rgba(0, 0, 0, 0.35)', blur: 6 },
+    color: labelColor,
+    planeSize: LABEL_SIZE,
   });
-  const label = new THREE.Mesh(
-    new THREE.PlaneGeometry(LABEL_SIZE, LABEL_SIZE),
-    material,
-  );
-  return label;
-};
-
-type EightSidedDiceProps = {
-  color?: DiceColor;
-  translucent?: boolean;
-};
 
 export default function EightSidedDice({
   color = 'red',
   translucent = true,
-}: EightSidedDiceProps) {
+}: DiceStageProps) {
   const {
     meshRef,
     rotationRef,

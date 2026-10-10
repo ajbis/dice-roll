@@ -1,4 +1,11 @@
 import * as THREE from 'three';
+import {
+  buildDiceGeometry,
+  computeFaceCenter,
+  computeFaceNormal,
+  lerp3,
+  type FacePolygon,
+} from '../../utils/diceGeometry';
 import { durableLabelTexture } from '../../utils/labelTexture';
 import { fetchDiceRoll } from '../../utils/rollDice';
 import type { DiceColor } from '../../utils/settings';
@@ -75,38 +82,6 @@ const LABEL_BETA_DEG: readonly number[] = [
 // the bottom-read rest pose — not identity.
 const INITIAL_ROTATION: Rotation = { x: -177.2356, y: 55.25, z: 45 };
 
-type FacePolygon = readonly (readonly [number, number, number])[];
-
-const lerp3 = (
-  from: readonly [number, number, number],
-  to: readonly [number, number, number],
-  t: number,
-): [number, number, number] => [
-  from[0] + (to[0] - from[0]) * t,
-  from[1] + (to[1] - from[1]) * t,
-  from[2] + (to[2] - from[2]) * t,
-];
-
-const computeFaceNormal = (verts: FacePolygon, center: THREE.Vector3) => {
-  const [a, b, c] = verts;
-  const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]] as const;
-  const ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]] as const;
-  const nx = ab[1] * ac[2] - ab[2] * ac[1];
-  const ny = ab[2] * ac[0] - ab[0] * ac[2];
-  const nz = ab[0] * ac[1] - ab[1] * ac[0];
-  const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
-  const normal = new THREE.Vector3(nx / len, ny / len, nz / len);
-  if (normal.dot(center) < 0) normal.negate();
-  return normal;
-};
-
-const computeFaceCenter = (verts: FacePolygon) => {
-  const cx = verts.reduce((s, v) => s + v[0], 0) / verts.length;
-  const cy = verts.reduce((s, v) => s + v[1], 0) / verts.length;
-  const cz = verts.reduce((s, v) => s + v[2], 0) / verts.length;
-  return new THREE.Vector3(cx, cy, cz);
-};
-
 const FACE_GEOM = FACES.map((face) => {
   const verts = face.map((i) => VERTICES[i]);
   const center = computeFaceCenter(verts);
@@ -117,8 +92,8 @@ const FACE_GEOM = FACES.map((face) => {
    vertex along its edges (0.07 world units, same camera + circumradius as
    the D6, so the triangles read the same size on screen). Each triangle face
    becomes a hexagon (two cut points per corner), each vertex a small flat
-   triangle. Winding and normals are auto-derived in the build loop below
-   (D10-style). Labels/roll targets stay on the original 4 face planes — the
+   triangle. Winding and normals are auto-derived by the shared
+   buildDiceGeometry. Labels/roll targets stay on the original 4 face planes — the
    cuts only remove corner slivers, and the face planes/centres are unchanged
    (the hexagon is symmetric about the original triangle's centroid). */
 const CORNER_CUT = 0.07;
@@ -252,42 +227,7 @@ export default function FourSidedDice({
     rotationRef,
     cancelAnimation,
     buildMesh: ({ palette, opacity, translucent }) => {
-      const geometry = new THREE.BufferGeometry();
-      const vertices: number[] = [];
-      const normals: number[] = [];
-
-      for (const face of CHAMFER_FACES) {
-        const faceVerts = face;
-        const center = computeFaceCenter(faceVerts);
-        const normal = computeFaceNormal(faceVerts, center);
-        const nx = normal.x;
-        const ny = normal.y;
-        const nz = normal.z;
-
-        const [a, b, c] = faceVerts;
-        const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]] as const;
-        const ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]] as const;
-        const geoNx = ab[1] * ac[2] - ab[2] * ac[1];
-        const geoNy = ab[2] * ac[0] - ab[0] * ac[2];
-        const geoNz = ab[0] * ac[1] - ab[1] * ac[0];
-        const outward =
-          geoNx * center.x + geoNy * center.y + geoNz * center.z >= 0;
-        const ordered = outward ? faceVerts : [...faceVerts].reverse();
-
-        for (let i = 1; i < ordered.length - 1; i++) {
-          vertices.push(...ordered[0], ...ordered[i], ...ordered[i + 1]);
-          normals.push(nx, ny, nz, nx, ny, nz, nx, ny, nz);
-        }
-      }
-
-      geometry.setAttribute(
-        'position',
-        new THREE.Float32BufferAttribute(vertices, 3),
-      );
-      geometry.setAttribute(
-        'normal',
-        new THREE.Float32BufferAttribute(normals, 3),
-      );
+      const geometry = buildDiceGeometry(CHAMFER_FACES);
 
       const mesh = new THREE.Mesh(
         geometry,

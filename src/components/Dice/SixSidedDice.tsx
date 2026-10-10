@@ -1,4 +1,11 @@
 import * as THREE from 'three';
+import {
+  buildDiceGeometry,
+  faceBasisForNormal,
+  lerp3,
+  type FacePolygon,
+  uprightOrientationForFace,
+} from '../../utils/diceGeometry';
 import { durableLabelTexture } from '../../utils/labelTexture';
 import { fetchDiceRoll } from '../../utils/rollDice';
 import type { DiceColor } from '../../utils/settings';
@@ -9,12 +16,6 @@ import './Dice.scss';
 import './SixSidedDice.scss';
 
 type FaceValue = 1 | 2 | 3 | 4 | 5 | 6;
-
-type FaceBasis = {
-  normal: THREE.Vector3;
-  up: THREE.Vector3;
-  orientation: THREE.Quaternion;
-};
 
 const NEAR_DISTANCE = 1.01;
 const NEAR_SIZE = 2;
@@ -78,21 +79,9 @@ const PIPS: Record<FaceValue, readonly (readonly [number, number])[]> = {
   ],
 };
 
-type FacePolygon = readonly (readonly [number, number, number])[];
-
-const lerp3 = (
-  from: readonly [number, number, number],
-  to: readonly [number, number, number],
-  t: number,
-): [number, number, number] => [
-  from[0] + (to[0] - from[0]) * t,
-  from[1] + (to[1] - from[1]) * t,
-  from[2] + (to[2] - from[2]) * t,
-];
-
 /* Chamfered cube: each square face becomes an octagon (two cut points per
    corner) and each of the 8 vertices becomes a small flat triangle. Winding
-   and normals are auto-derived below, same as the D10 builder. */
+   and normals are auto-derived by the shared buildDiceGeometry. */
 const buildChamferedCube = (cut: number): FacePolygon[] => {
   const faces: FacePolygon[] = [];
   const t = cut / 2; // face edges have length 2 → t of the edge = `cut`
@@ -143,64 +132,7 @@ const buildChamferedCube = (cut: number): FacePolygon[] => {
 
 const CHAMFER_FACES = buildChamferedCube(CORNER_CUT);
 
-const computeFaceCenter = (verts: readonly FacePolygon[number][]) => {
-  const cx = verts.reduce((s, v) => s + v[0], 0) / verts.length;
-  const cy = verts.reduce((s, v) => s + v[1], 0) / verts.length;
-  const cz = verts.reduce((s, v) => s + v[2], 0) / verts.length;
-  return new THREE.Vector3(cx, cy, cz);
-};
-
-const computeFaceNormal = (
-  verts: readonly FacePolygon[number][],
-  center: THREE.Vector3,
-) => {
-  const [a, b, c] = verts;
-  const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]] as const;
-  const ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]] as const;
-  const nx = ab[1] * ac[2] - ab[2] * ac[1];
-  const ny = ab[2] * ac[0] - ab[0] * ac[2];
-  const nz = ab[0] * ac[1] - ab[1] * ac[0];
-  const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
-  const normal = new THREE.Vector3(nx / len, ny / len, nz / len);
-  if (normal.dot(center) < 0) normal.negate();
-  return normal;
-};
-
-const createFaceBasis = (direction: readonly [number, number, number]) => {
-  const normal = new THREE.Vector3(...direction).normalize();
-  const referenceUp =
-    Math.abs(normal.y) > 0.9
-      ? new THREE.Vector3(0, 0, 1)
-      : new THREE.Vector3(0, 1, 0);
-  const up = referenceUp
-    .clone()
-    .sub(normal.clone().multiplyScalar(referenceUp.dot(normal)))
-    .normalize();
-  const right = new THREE.Vector3().crossVectors(up, normal).normalize();
-  const basis = new THREE.Matrix4().makeBasis(right, up, normal);
-
-  return {
-    normal,
-    up,
-    orientation: new THREE.Quaternion().setFromRotationMatrix(basis),
-  } satisfies FaceBasis;
-};
-
-const FACE_BASES = FACE_NORMALS.map(createFaceBasis);
-
-const uprightOrientationForFace = (face: FaceBasis) => {
-  const cameraNormal = new THREE.Vector3(0, 0, 1);
-  const target = new THREE.Quaternion().setFromUnitVectors(
-    face.normal,
-    cameraNormal,
-  );
-  const up = face.up.clone().applyQuaternion(target);
-  const twist = new THREE.Quaternion().setFromAxisAngle(
-    new THREE.Vector3(0, 0, 1),
-    Math.atan2(up.x, up.y),
-  );
-  return twist.multiply(target);
-};
+const FACE_BASES = FACE_NORMALS.map(faceBasisForNormal);
 
 const createPipLabel = (value: FaceValue, color: string, planeSize: number) => {
   const canvas = document.createElement('canvas');
@@ -265,41 +197,7 @@ export default function SixSidedDice({
     rotationRef,
     cancelAnimation,
     buildMesh: ({ palette, opacity, translucent }) => {
-      const geometry = new THREE.BufferGeometry();
-      const positions: number[] = [];
-      const normals: number[] = [];
-
-      for (const face of CHAMFER_FACES) {
-        const center = computeFaceCenter(face);
-        const normal = computeFaceNormal(face, center);
-        const nx = normal.x;
-        const ny = normal.y;
-        const nz = normal.z;
-
-        const [a, b, c] = face;
-        const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]] as const;
-        const ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]] as const;
-        const geoNx = ab[1] * ac[2] - ab[2] * ac[1];
-        const geoNy = ab[2] * ac[0] - ab[0] * ac[2];
-        const geoNz = ab[0] * ac[1] - ab[1] * ac[0];
-        const outward =
-          geoNx * center.x + geoNy * center.y + geoNz * center.z >= 0;
-        const ordered = outward ? face : [...face].reverse();
-
-        for (let i = 1; i < ordered.length - 1; i++) {
-          positions.push(...ordered[0], ...ordered[i], ...ordered[i + 1]);
-          normals.push(nx, ny, nz, nx, ny, nz, nx, ny, nz);
-        }
-      }
-
-      geometry.setAttribute(
-        'position',
-        new THREE.Float32BufferAttribute(positions, 3),
-      );
-      geometry.setAttribute(
-        'normal',
-        new THREE.Float32BufferAttribute(normals, 3),
-      );
+      const geometry = buildDiceGeometry(CHAMFER_FACES);
 
       const mesh = new THREE.Mesh(
         geometry,

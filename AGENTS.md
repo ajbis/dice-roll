@@ -93,7 +93,8 @@ Each `.stage--*` sets its own `--die-size` clamp — the only per-die size lever
 
 - `DiceHint` (default export) is the one hint component used by all six dice — props `isRolling: boolean`, `error: string | null`, `result: number | null` (`FaceValue` is a per-die local type, so the hint takes plain `number`); the idle/rolling/error/result text lives here too
 - Its `<p className="hint">` is **portalled to `document.body`** — `.stage` carries `contain: layout paint`, which makes the stage the containing block for `position: fixed` descendants (an in-stage hint anchors to the stage, not the viewport, and scrolls with the page)
-- Same placement for every die: `position: fixed; bottom: 25vh; left: 0; right: 0; z-index: 5; text-align: center; pointer-events: none` — block bottom edge 25% up the viewport, full-width band, text centred
+- Same placement for every die: `position: fixed; bottom: 25dvh` (legacy `25vh` fallback kept); `left: 0; right: 0; z-index: 5; text-align: center; pointer-events: none` — block bottom edge 25% up the viewport, full-width band, text centred
+- Mobile viewport units: `.stage`/`body` use `min-height: 100dvh` with the `vh` line as legacy fallback — on mobile `100vh`/`25vh` measure the **large** viewport (URL-bar hidden), so with the bar visible the page overflows by the bar height (phantom non-working scrollbar; Samsung Internet draws it on the left), the die centres below the visible middle, and the fixed hint creeps up and crowds the die (reported from a Samsung phone — the settings icon is `position: fixed` and does not shift centre). `dvh` tracks the visible viewport; desktop is unchanged (`dvh` ≡ `vh` there)
 - `pointer-events: none` → drag rolls hit-test through to the stage/canvas; `z-index: 5` paints above the die but below the settings button (10) and settings dialog (20)
 - The hint is out of the stage flex flow: `.stage` holds only `.three-scene`, centred on its own
 

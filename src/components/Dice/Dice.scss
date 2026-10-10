@@ -9,7 +9,12 @@
   gap: 3rem;
 
   width: 100%;
+
+  /* 100vh on mobile = the large viewport (URL bar hidden): the stage then
+     overflows the visible area (phantom scrollbar) and the die centres below
+     the middle. dvh tracks the visible viewport; vh stays as the fallback. */
   min-height: 100vh;
+  min-height: 100dvh;
 
   cursor: grab;
   touch-action: none;
@@ -24,7 +29,12 @@
 .hint {
   position: fixed;
   right: 0;
+
+  /* Same large-viewport trap as the stage: 25vh measures against the hidden-
+     under-bar viewport, so with the URL bar visible the hint creeps up and
+     crowds the die. dvh keeps the measured 25%-up placement. */
   bottom: 25vh;
+  bottom: 25dvh;
   left: 0;
   z-index: 5;
 

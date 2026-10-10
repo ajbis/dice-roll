@@ -6,7 +6,6 @@ import {
   uprightOrientationForFace,
 } from '../../utils/diceGeometry';
 import { durableLabelTexture } from '../../utils/labelTexture';
-import { fetchDiceRoll } from '../../utils/rollDice';
 import type { DiceColor } from '../../utils/settings';
 import DiceHint from './DiceHint';
 import { useDiceInteraction } from './hooks/useDiceInteraction';
@@ -116,9 +115,11 @@ export default function TwelveSidedDice({
     onPointerMove: handlePointerMove,
     onPointerUp: handlePointerUp,
   } = useDiceInteraction({
-    fetchRoll: () => fetchDiceRoll(12),
+    sides: 12,
     resolveTarget: (value) =>
-      uprightOrientationForFace(FACE_BASES[FACE_TO_NUMBER.indexOf(value)]),
+      uprightOrientationForFace(
+        FACE_BASES[FACE_TO_NUMBER.indexOf(value as FaceValue)],
+      ),
   });
 
   const { mountRef } = useThreeStage({

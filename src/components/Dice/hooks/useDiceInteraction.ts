@@ -1,6 +1,11 @@
 import { useCallback, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { easeOut, planRoll } from '../../../utils/rollAnimation';
+import {
+  type DiceSides,
+  type TwentySidedValue,
+  fetchDiceRoll,
+} from '../../../utils/rollDice';
 
 export type Rotation = {
   x: number;
@@ -38,17 +43,17 @@ const rotationFromQuaternion = (quaternion: THREE.Quaternion): Rotation => {
   };
 };
 
-type UseDiceInteractionOptions<V extends number> = {
-  fetchRoll: () => Promise<V>;
-  resolveTarget: (value: V) => THREE.Quaternion;
+type UseDiceInteractionOptions = {
+  sides: DiceSides;
+  resolveTarget: (value: TwentySidedValue) => THREE.Quaternion;
   initialRotation?: Rotation;
 };
 
-export function useDiceInteraction<V extends number>({
-  fetchRoll,
+export function useDiceInteraction({
+  sides,
   resolveTarget,
   initialRotation = { x: 0, y: 0, z: 0 },
-}: UseDiceInteractionOptions<V>) {
+}: UseDiceInteractionOptions) {
   const meshRef = useRef<THREE.Mesh | null>(null);
   const rotationRef = useRef<Rotation>({ ...initialRotation });
   const restRef = useRef<Rotation>({ ...initialRotation });
@@ -59,11 +64,11 @@ export function useDiceInteraction<V extends number>({
 
   const [isRolling, setIsRolling] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [result, setResult] = useState<V | null>(null);
+  const [result, setResult] = useState<TwentySidedValue | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const optionsRef = useRef({ fetchRoll, resolveTarget });
-  optionsRef.current = { fetchRoll, resolveTarget };
+  const optionsRef = useRef({ sides, resolveTarget });
+  optionsRef.current = { sides, resolveTarget };
 
   const setRotation = useCallback((rotation: Rotation) => {
     rotationRef.current = rotation;
@@ -146,7 +151,7 @@ export function useDiceInteraction<V extends number>({
     setError(null);
 
     try {
-      const value = await optionsRef.current.fetchRoll();
+      const value = await fetchDiceRoll(optionsRef.current.sides);
       const targetQuaternion = optionsRef.current.resolveTarget(value);
       const from = rotationRef.current;
       const spun = planRoll(from, targetQuaternion, SPIN_TURNS);

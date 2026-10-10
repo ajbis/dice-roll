@@ -8,7 +8,6 @@ import {
   uprightOrientationForFace,
 } from '../../utils/diceGeometry';
 import { durableLabelTexture } from '../../utils/labelTexture';
-import { fetchDiceRoll } from '../../utils/rollDice';
 import type { DiceColor } from '../../utils/settings';
 import DiceHint from './DiceHint';
 import { useDiceInteraction } from './hooks/useDiceInteraction';
@@ -161,7 +160,7 @@ export default function EightSidedDice({
     onPointerMove: handlePointerMove,
     onPointerUp: handlePointerUp,
   } = useDiceInteraction({
-    fetchRoll: () => fetchDiceRoll(8),
+    sides: 8,
     resolveTarget: (value) => uprightOrientationForFace(FACE_BASES[value - 1]),
   });
 

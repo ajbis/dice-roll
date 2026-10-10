@@ -82,6 +82,24 @@ Invariants (do not regress):
 - `buildMesh` must **return** the mesh (not add it to a scene) and must not set `mesh.rotation` — the hook's pose line overwrites it right after; pose, lights, refs, and dispose are the hook's job
 - `buildMesh` must only add labels as direct `THREE.Mesh` children of the returned mesh — cleanup disposes geometry, material, and each direct-child label plane; a nested group would leak
 
+## Geometry builder & face helpers (`src/utils/diceGeometry.ts`)
+
+The geometry/basis math that all six dice used to duplicate lives here; each die keeps only its vertex/face tables, chamfer builder, and material.
+
+- Types: `FacePolygon` (`readonly (readonly [number, number, number])[]` — resolved coordinates, not indices), `FaceBasis` (`{ normal, up, orientation }`)
+- `buildDiceGeometry(faces)` → `BufferGeometry`: per face computes centre + outward normal, auto-orients winding by geometric normal · centre dot (`>= 0`, else reverse — a wrong winding = back-face see-through holes), fans `(0, i, i+1)`, bakes the face normal per vertex (every material stays `flatShading: false`), sets `position`/`normal` Float32 attributes. This is the block each die used to inline in `buildMesh`: D4/D6/D8 pass `CHAMFER_FACES`, D10/D12/D20 pass `FACES.map((face) => face.map((i) => VERTICES[i]))`
+- `computeFaceCenter`/`computeFaceNormal` are shared by the builder, `faceBasisForPolygon`, D4's `FACE_GEOM`, D8's chamfer cut-point sort, and label placement (D10/D12/D20 `addLabels`)
+- Basis helpers, one per original float path: `faceBasisForNormal` normalizes its direction input (D6/D8: `FACE_BASES = FACE_NORMALS.map(faceBasisForNormal)`), `faceBasisForPolygon` derives centre + outward normal first (already unit); both then do reference-up (world Z when `|n.y| > 0.9`) → Gram-Schmidt → Matrix4 basis. D10/D12/D20 build `FACE_BASES` as `Array.from({ length: FACE_TO_NUMBER.length }, (_, i) => faceBasisForPolygon(FACES[i].map((j) => VERTICES[j])))`. Merging the two into one normalizing helper is a last-bit change to every landed quaternion (unit `v / |v|` is not the identity on floats) — worth it only together with the verification below, or with that drift consciously accepted
+- `uprightOrientationForFace` — the landing twist, byte-identical across D6/D8/D10/D12/D20 before the move (D4 does not use it: rest face down); `lerp3` — chamfer edge interpolation, D4/D6/D8 only
+- Per-die, NOT shared: `VERTICES`/`FACES`/`FACE_NORMALS`/`FACE_TO_NUMBER` tables, `buildChamferedTetra`/`buildChamferedCube`/`buildChamferedOcta`, materials, `createLabel`, D4's `FACE_GEOM`/`restingOrientationForFace`/`LABEL_BETA_DEG`
+
+Invariants (do not regress):
+
+- `buildDiceGeometry` keeps geo-normal · centre dot `>= 0` winding, fan `(0, i, i+1)`, per-vertex baked face normal — table edits must still self-heal winding
+- The two basis entry points kept their exact original bodies — pixel-identical screenshots of all six dice verified the extraction, so any merge or added re-normalize re-opens that check
+- D10 `FACE_BASES` length stays `FACE_TO_NUMBER.length` (10 of the 12 `FACES` — the blank caps are excluded)
+- `uprightOrientationForFace` stays verbatim (arc to `+Z`, twist `atan2(up.x, up.y)` about `+Z`)
+
 ## Die sizing (`src/components/Dice/*.scss`)
 
 Each `.stage--*` sets its own `--die-size` clamp — the only per-die size lever (canvas px; camera is fov 28 / z 7 for every die, so on-screen px ∝ canvas px). The shared `.three-scene { width/height: var(--die-size) }` rules live in `EightSidedDice.scss` but apply to all dice.
@@ -115,9 +133,9 @@ Design:
 
 Invariants (do not regress):
 
-- Geometry builder auto-orients winding via geo-normal · center dot (fixes back-face see-through) and fans n-gons (20 verts: `0–4` top cut ring, `5–9` bottom cut ring, `10–14` upper ring, `15–19` lower ring)
+- Geometry is built by the shared `buildDiceGeometry` (`src/utils/diceGeometry.ts`) which auto-orients winding via geo-normal · center dot (fixes back-face see-through) and fans n-gons (20 verts: `0–4` top cut ring, `5–9` bottom cut ring, `10–14` upper ring, `15–19` lower ring)
 - Per-face baked normals + `flatShading: false` (prevents diagonal creases on multi-triangle faces)
-- `computeFaceNormal` flips to outward via center dot
+- `computeFaceNormal` (shared, `diceGeometry.ts`) flips to outward via center dot
 - `FACE_BASES` length = `FACE_TO_NUMBER.length` (numbered faces only)
 - Lighting neutral (any color works): ambient/hemi/dir all 1.0, owned by `useThreeStage` (per-die dice no longer add lights)
 - Side faces are planar: `RING_Y = POLE_Y × 0.105573` (kite planarity ratio); truncation preserves planarity — non-planar faces fold, cull triangles (holes), and swallow labels (measured deviation 0.357 vs 0.01 label offset)
@@ -134,7 +152,7 @@ Design:
 - Regular dodecahedron: 12 planar pentagons, no truncation/squash; circumradius 1.7 (matches the D8/D10 silhouette); 20 hard-coded vertices (φ construction × 1.7/√3), `FACES` CCW-from-outside
 - `FACE_TO_NUMBER` = `[1, 2, 3, 4, 5, 6, 8, 7, 9, 10, 11, 12]` — **opposite faces sum to 13**; roll resolves `FACE_TO_NUMBER.indexOf(value)`
 - Two-digit labels (10–12): canvas font `700 160px` on 256px, `LABEL_SIZE` 1.0 (worst-case inscribed square across all face orientations ≈ 1.195)
-- Builder, material, and label offsets follow D10 (auto-winding fan, baked normals + `flatShading: false`, roughness 0.4, near `+0.01·n` / far `−0.05·n`)
+- Geometry uses the shared `buildDiceGeometry` (`src/utils/diceGeometry.ts`); material and label offsets follow D10 (baked normals + `flatShading: false`, roughness 0.4, near `+0.01·n` / far `−0.05·n`)
 
 Invariants (do not regress):
 
@@ -151,7 +169,7 @@ Design:
 - `FACE_TO_NUMBER` = `[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 11, 13, 14, 16, 15, 18, 17, 19, 20]` — **opposite faces sum to 21**; roll resolves `FACE_TO_NUMBER.indexOf(value)`
 - `LABEL_SIZE` 0.9 (10% smaller than D12), canvas font `700 160px` — glyph-fit limit over all 20 face orientations ≈ 1.14, so 0.9 fits with margin; the transparent plane corners may overhang the triangle (painted digits stay inside, as on D8)
 - Lands via the shared `uprightOrientationForFace` twist (bare arc would land `1`/`2` upside down and ten faces at ±15°/±20.9°/±75°)
-- Builder, material, and label offsets follow D12
+- Geometry is the shared `buildDiceGeometry`; material and label offsets follow D12
 
 Invariants (do not regress):
 
@@ -165,7 +183,7 @@ Invariants (do not regress):
 Design:
 
 - Regular tetrahedron: circumradius 1.7 (same silhouette); 4 vertices `(±s, ±s, ±s)` with matching sign parity, `s = 1.7/√3 = 0.981495`; **no opposite faces** (only Platonic solid without parallel pairs) → no opposite-sum convention; `FACE_TO_NUMBER` = `[1, 2, 3, 4]`
-- **Chamfered corners** (same treatment as the D6): `CORNER_CUT = 0.07` world units cut off each of the 4 vertices along its edges — same absolute cut as D6/D8 (same camera fov 28 / z 7; on-screen facet px track each die's `--die-size` — see Die sizing); built by `buildChamferedTetra` — each triangle face becomes a hexagon (2 cut points per corner), each vertex a small flat triangle, D10-style builder (auto-orient winding, fan, baked normals). Labels/roll targets stay on the original 4 face planes: the cuts only remove corner slivers, the hexagon is symmetric about the original centroid, and face normals/centres are unchanged (`FACE_GEOM` still derived from `FACES`/`VERTICES`)
+- **Chamfered corners** (same treatment as the D6): `CORNER_CUT = 0.07` world units cut off each of the 4 vertices along its edges — same absolute cut as D6/D8 (same camera fov 28 / z 7; on-screen facet px track each die's `--die-size` — see Die sizing); built by `buildChamferedTetra` — each triangle face becomes a hexagon (2 cut points per corner), each vertex a small flat triangle, shared `buildDiceGeometry` (auto-orient winding, fan, baked normals). Labels/roll targets stay on the original 4 face planes: the cuts only remove corner slivers, the hexagon is symmetric about the original centroid, and face normals/centres are unchanged (`FACE_GEOM` still derived from `FACES`/`VERTICES`)
 - **Bottom-read** labels: 3 per face, one at each edge midpoint, centre at `u = 0.625` (fraction centre→edge, clear of the edges along their centre lines); value shown = the **other face sharing that edge** — a face never shows its own value, every value printed exactly 3×; the rolled value = the resting face's number
 - **Landing = rest face DOWN** (hidden, apex up — the number "sits on the table"; do NOT face the rolled camera like other dice): `restingOrientationForFace(r)` = minimal-arc `n_r → (0, −1, 0)`, then world-Y rotation by `−atan2(x, z)` of the displayed front face normal, front face = `(r + 1) % 4` (bijection → each face has exactly one display orientation)
 - Result label settles at world `(0, −0.283, 0.701)` and reads upright. **Near labels use only the natural basis** (local up = face centre − edge midpoint, no per-label β): digits are edge-aligned with their top toward the face centre — bottom-read — so the result lands upright and the other two numbers on the displayed face stay upside down. **Far twins** (through-body copies) apply the `LABEL_BETA_DEG` table (β = 0° at result positions 2/4/6/9, 180° elsewhere) then flip in-plane about local **X** (`far = orientation·Rz(β)·Rx(π)`) — at settle the rolled value's through-body side copies read upright. Orientation is face-intrinsic (a property of the pane, not the view) — no screen-space solve
@@ -185,7 +203,7 @@ Invariants (do not regress):
 
 Design:
 
-- **Chamfered cube** (faceted corners, no curves): `CORNER_CUT = 0.07` world units cut off each of the 8 vertices along its edges (side = 2 → ~9px triangle legs at final size), built by `buildChamferedCube` — each square face becomes an octagon (2 cut points per corner), each vertex becomes a small flat triangle; D10-style builder (auto-orient winding via geo-normal · centre dot, fan n-gons, per-face baked normals + `flatShading: false`). Silhouette extremes stay at edge midpoints → landed bbox unaffected by the cut; `CORNER_CUT` is the tunable (chop deeper = cuboctahedron territory; 0 keeps the plain cube)
+- **Chamfered cube** (faceted corners, no curves): `CORNER_CUT = 0.07` world units cut off each of the 8 vertices along its edges (side = 2 → ~9px triangle legs at final size), built by `buildChamferedCube` — each square face becomes an octagon (2 cut points per corner), each vertex becomes a small flat triangle; shared `buildDiceGeometry` (auto-orient winding via geo-normal · centre dot, fan n-gons) with per-face baked normals + `flatShading: false`). Silhouette extremes stay at edge midpoints → landed bbox unaffected by the cut; `CORNER_CUT` is the tunable (chop deeper = cuboctahedron territory; 0 keeps the plain cube)
 - **Pips, not digits**: 512px canvas, 12% inset, 3×3 cells, pip radius `0.055733 × size`, grid centres `[0.246667, 0.5, 0.753333]` of the plane; colour `palette.label` (far twins white)
 - Value → face (index = value − 1): `1 +Z front, 2 +Y top, 3 +X right, 4 −X left, 5 −Y bottom, 6 −Z back` — opposite pairs 1-6 / 2-5 / 3-4 (classic d6); identity pose shows 1 front / 2 top / 3 right
 - **Size**: canvas `--die-size: clamp(204px, 48vmin, 376px)` (fov 28, z 7, cube side 2) — measured red-bbox 252×252 @ (514,274) at 1280×800, identical for every landed value
@@ -207,7 +225,7 @@ Invariants (do not regress):
 
 Design:
 
-- **Chamfered octahedron**: `CORNER_CUT = 0.07` world units cut off each of the 6 vertices along its edges (same cut and camera as D4/D6 — shared world constant; on-screen facet px track each die's `--die-size`), built by `buildChamferedOcta` — each triangle face becomes a hexagon (2 cut points per corner), each vertex a flat quadrilateral (degree 4; cut points sorted cyclically around the vertex axis so the fan is non-crossing); D10-style builder (auto-orient winding via geo-normal · centre dot, fan, baked normals). Labels/roll targets stay on the original 8 face planes — `FACE_BASES`/`FACE_CENTER` untouched; the hexagon is symmetric about the original centroid
+- **Chamfered octahedron**: `CORNER_CUT = 0.07` world units cut off each of the 6 vertices along its edges (same cut and camera as D4/D6 — shared world constant; on-screen facet px track each die's `--die-size`), built by `buildChamferedOcta` — each triangle face becomes a hexagon (2 cut points per corner), each vertex a flat quadrilateral (degree 4; cut points sorted cyclically around the vertex axis so the fan is non-crossing); shared `buildDiceGeometry` (auto-orient winding via geo-normal · centre dot, fan, baked normals). Labels/roll targets stay on the original 8 face planes — `FACE_BASES`/`FACE_CENTER` untouched; the hexagon is symmetric about the original centroid
 - Regular octahedron: circumradius 1.7 (`OCTA_RADIUS`), axis-aligned vertices; `FACES` derived from `FACE_NORMALS` octants (sign-matched axis intercepts), so value → `FACE_BASES[value − 1]`
 - Labels: face-centre-mounted at `n · 1.08` (`FACE_CENTER`, floats ~0.10 above the face plane), far twins white at `n · 0.88` (`FACE_CENTER − 0.2`), font `700 200px` with a soft shadow, `LABEL_SIZE` 0.864, `renderOrder` 1 / −1 (shared bullets)
 - Material: `flatShading: true`, roughness 0.46, metalness 0.08 — D8's own look (flat shading uses the derivative normal in the fragment shader; the builder still bakes per-face normals)

@@ -1,4 +1,10 @@
 import * as THREE from 'three';
+import {
+  buildDiceGeometry,
+  computeFaceCenter,
+  faceBasisForPolygon,
+  uprightOrientationForFace,
+} from '../../utils/diceGeometry';
 import { durableLabelTexture } from '../../utils/labelTexture';
 import { fetchDiceRoll } from '../../utils/rollDice';
 import type { DiceColor } from '../../utils/settings';
@@ -8,12 +14,6 @@ import { useThreeStage } from './hooks/useThreeStage';
 import './TenSidedDice.scss';
 
 type FaceValue = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
-
-type FaceBasis = {
-  normal: THREE.Vector3;
-  up: THREE.Vector3;
-  orientation: THREE.Quaternion;
-};
 
 const LABEL_SIZE = 0.77;
 
@@ -77,67 +77,9 @@ const FACES: readonly (readonly number[])[] = [
 
 const FACE_TO_NUMBER: readonly FaceValue[] = [1, 3, 5, 7, 9, 8, 6, 4, 2, 10];
 
-const computeFaceNormal = (
-  verts: readonly [number, number, number][],
-  center: THREE.Vector3,
-) => {
-  const [a, b, c] = verts;
-  const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]] as const;
-  const ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]] as const;
-  const nx = ab[1] * ac[2] - ab[2] * ac[1];
-  const ny = ab[2] * ac[0] - ab[0] * ac[2];
-  const nz = ab[0] * ac[1] - ab[1] * ac[0];
-  const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
-  const normal = new THREE.Vector3(nx / len, ny / len, nz / len);
-  if (normal.dot(center) < 0) normal.negate();
-  return normal;
-};
-
-const computeFaceCenter = (verts: readonly [number, number, number][]) => {
-  const cx = verts.reduce((s, v) => s + v[0], 0) / verts.length;
-  const cy = verts.reduce((s, v) => s + v[1], 0) / verts.length;
-  const cz = verts.reduce((s, v) => s + v[2], 0) / verts.length;
-  return new THREE.Vector3(cx, cy, cz);
-};
-
-const createFaceBasis = (faceIndex: number): FaceBasis => {
-  const faceVerts = FACES[faceIndex].map((i) => VERTICES[i]);
-  const center = computeFaceCenter(faceVerts);
-  const normal = computeFaceNormal(faceVerts, center);
-  const referenceUp =
-    Math.abs(normal.y) > 0.9
-      ? new THREE.Vector3(0, 0, 1)
-      : new THREE.Vector3(0, 1, 0);
-  const up = referenceUp
-    .clone()
-    .sub(normal.clone().multiplyScalar(referenceUp.dot(normal)))
-    .normalize();
-  const right = new THREE.Vector3().crossVectors(up, normal).normalize();
-  const basis = new THREE.Matrix4().makeBasis(right, up, normal);
-  return {
-    normal,
-    up,
-    orientation: new THREE.Quaternion().setFromRotationMatrix(basis),
-  };
-};
-
 const FACE_BASES = Array.from({ length: FACE_TO_NUMBER.length }, (_, i) =>
-  createFaceBasis(i),
+  faceBasisForPolygon(FACES[i].map((j) => VERTICES[j])),
 );
-
-const uprightOrientationForFace = (face: FaceBasis) => {
-  const cameraNormal = new THREE.Vector3(0, 0, 1);
-  const target = new THREE.Quaternion().setFromUnitVectors(
-    face.normal,
-    cameraNormal,
-  );
-  const up = face.up.clone().applyQuaternion(target);
-  const twist = new THREE.Quaternion().setFromAxisAngle(
-    new THREE.Vector3(0, 0, 1),
-    Math.atan2(up.x, up.y),
-  );
-  return twist.multiply(target);
-};
 
 const FAR_LABEL_COLOR = '#ffffff';
 
@@ -202,41 +144,8 @@ export default function TenSidedDice({
     rotationRef,
     cancelAnimation,
     buildMesh: ({ palette, opacity, translucent }) => {
-      const geometry = new THREE.BufferGeometry();
-      const vertices: number[] = [];
-      const normals: number[] = [];
-
-      for (const face of FACES) {
-        const faceVerts = face.map((i) => VERTICES[i]);
-        const center = computeFaceCenter(faceVerts);
-        const normal = computeFaceNormal(faceVerts, center);
-        const nx = normal.x;
-        const ny = normal.y;
-        const nz = normal.z;
-
-        const [a, b, c] = faceVerts;
-        const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]] as const;
-        const ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]] as const;
-        const geoNx = ab[1] * ac[2] - ab[2] * ac[1];
-        const geoNy = ab[2] * ac[0] - ab[0] * ac[2];
-        const geoNz = ab[0] * ac[1] - ab[1] * ac[0];
-        const outward =
-          geoNx * center.x + geoNy * center.y + geoNz * center.z >= 0;
-        const ordered = outward ? faceVerts : [...faceVerts].reverse();
-
-        for (let i = 1; i < ordered.length - 1; i++) {
-          vertices.push(...ordered[0], ...ordered[i], ...ordered[i + 1]);
-          normals.push(nx, ny, nz, nx, ny, nz, nx, ny, nz);
-        }
-      }
-
-      geometry.setAttribute(
-        'position',
-        new THREE.Float32BufferAttribute(vertices, 3),
-      );
-      geometry.setAttribute(
-        'normal',
-        new THREE.Float32BufferAttribute(normals, 3),
+      const geometry = buildDiceGeometry(
+        FACES.map((face) => face.map((i) => VERTICES[i])),
       );
 
       const mesh = new THREE.Mesh(

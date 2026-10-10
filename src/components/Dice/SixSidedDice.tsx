@@ -7,10 +7,10 @@ import {
   uprightOrientationForFace,
 } from '../../utils/diceGeometry';
 import { durableLabelTexture } from '../../utils/labelTexture';
-import type { DiceColor } from '../../utils/settings';
 import DiceHint from './DiceHint';
 import { useDiceInteraction } from './hooks/useDiceInteraction';
 import { useThreeStage } from './hooks/useThreeStage';
+import type { DiceStageProps } from './types';
 import './Dice.scss';
 import './SixSidedDice.scss';
 
@@ -164,15 +164,10 @@ const createPipLabel = (value: FaceValue, color: string, planeSize: number) => {
   );
 };
 
-type SixSidedDiceProps = {
-  color?: DiceColor;
-  translucent?: boolean;
-};
-
 export default function SixSidedDice({
   color = 'red',
   translucent = true,
-}: SixSidedDiceProps) {
+}: DiceStageProps) {
   const {
     meshRef,
     rotationRef,

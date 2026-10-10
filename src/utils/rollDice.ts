@@ -13,6 +13,7 @@ export function fetchDiceRoll(sides: 8): Promise<EightSidedValue>;
 export function fetchDiceRoll(sides: 10): Promise<TenSidedValue>;
 export function fetchDiceRoll(sides: 12): Promise<TwelveSidedValue>;
 export function fetchDiceRoll(sides: 20): Promise<TwentySidedValue>;
+export function fetchDiceRoll(sides: DiceSides): Promise<TwentySidedValue>;
 export function fetchDiceRoll(sides: DiceSides): Promise<TwentySidedValue> {
   const randomBytes = new Uint32Array(1);
   crypto.getRandomValues(randomBytes);

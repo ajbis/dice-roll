@@ -7,7 +7,6 @@ import {
   type FacePolygon,
 } from '../../utils/diceGeometry';
 import { durableLabelTexture } from '../../utils/labelTexture';
-import { fetchDiceRoll } from '../../utils/rollDice';
 import type { DiceColor } from '../../utils/settings';
 import DiceHint from './DiceHint';
 import {
@@ -214,9 +213,9 @@ export default function FourSidedDice({
     onPointerMove: handlePointerMove,
     onPointerUp: handlePointerUp,
   } = useDiceInteraction({
-    fetchRoll: () => fetchDiceRoll(4),
+    sides: 4,
     resolveTarget: (value) =>
-      restingOrientationForFace(FACE_TO_NUMBER.indexOf(value)),
+      restingOrientationForFace(FACE_TO_NUMBER.indexOf(value as FaceValue)),
     initialRotation: INITIAL_ROTATION,
   });
 

@@ -23,7 +23,10 @@
 
 body {
   min-width: 320px;
+
+  /* Same large-viewport trap as the stage (see Dice.scss). */
   min-height: 100vh;
+  min-height: 100dvh;
   margin: 0;
 
   background: var(--page-background);

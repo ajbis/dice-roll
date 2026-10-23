@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { durableLabelTexture } from './labelTexture';
+import { cachedLabelTexture } from './labelTexture';
 
 type DigitLabelOptions = {
   text: string;
@@ -16,24 +16,23 @@ export const createDigitLabel = ({
   planeSize,
   shadow,
 }: DigitLabelOptions): THREE.Mesh | null => {
-  const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 256;
-  const context = canvas.getContext('2d');
+  const texture = cachedLabelTexture(
+    `digit:${text}:${fontPx}:${color}:${shadow ? `${shadow.color}:${shadow.blur}` : ''}`,
+    256,
+    (context) => {
+      context.font = `700 ${fontPx}px dice-font, system-ui, sans-serif`;
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      context.fillStyle = color;
+      if (shadow) {
+        context.shadowColor = shadow.color;
+        context.shadowBlur = shadow.blur;
+      }
+      context.fillText(text, 128, 136);
+    },
+  );
+  if (!texture) return null;
 
-  if (!context) return null;
-
-  context.font = `700 ${fontPx}px dice-font, system-ui, sans-serif`;
-  context.textAlign = 'center';
-  context.textBaseline = 'middle';
-  context.fillStyle = color;
-  if (shadow) {
-    context.shadowColor = shadow.color;
-    context.shadowBlur = shadow.blur;
-  }
-  context.fillText(text, 128, 136);
-
-  const texture = durableLabelTexture(canvas);
   const material = new THREE.MeshBasicMaterial({
     map: texture,
     transparent: true,

@@ -22,3 +22,35 @@ export const durableLabelTexture = (
   image.src = canvas.toDataURL('image/png');
   return texture;
 };
+
+/* Scene rebuilds (color/opacity changes) recreate every label; without a
+   cache each rebuild pays a fresh data-URL decode and the numbers/dots
+   blink out for several frames. Key by everything that affects pixels —
+   canvas size, glyph/value, color, shadow — so labels stay warm across
+   rebuilds and die switches. */
+const textureCache = new Map<string, THREE.Texture>();
+const cachedTextures = new WeakSet<THREE.Texture>();
+
+export const cachedLabelTexture = (
+  key: string,
+  size: number,
+  draw: (context: CanvasRenderingContext2D) => void,
+): THREE.Texture | null => {
+  const existing = textureCache.get(key);
+  if (existing) return existing;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext('2d');
+  if (!context) return null;
+
+  draw(context);
+  const texture = durableLabelTexture(canvas);
+  textureCache.set(key, texture);
+  cachedTextures.add(texture);
+  return texture;
+};
+
+export const isCachedLabelTexture = (texture: THREE.Texture): boolean =>
+  cachedTextures.has(texture);

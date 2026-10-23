@@ -6,7 +6,7 @@ import {
   type FacePolygon,
   uprightOrientationForFace,
 } from '../../utils/diceGeometry';
-import { durableLabelTexture } from '../../utils/labelTexture';
+import { cachedLabelTexture } from '../../utils/labelTexture';
 import DiceHint from './DiceHint';
 import { useDiceInteraction } from './hooks/useDiceInteraction';
 import { useThreeStage } from './hooks/useThreeStage';
@@ -134,24 +134,23 @@ const CHAMFER_FACES = buildChamferedCube(CORNER_CUT);
 const FACE_BASES = FACE_NORMALS.map(faceBasisForNormal);
 
 const createPipLabel = (value: FaceValue, color: string, planeSize: number) => {
-  const canvas = document.createElement('canvas');
-  canvas.width = CANVAS_SIZE;
-  canvas.height = CANVAS_SIZE;
-  const context = canvas.getContext('2d');
+  const texture = cachedLabelTexture(
+    `pip:${value}:${color}`,
+    CANVAS_SIZE,
+    (context) => {
+      const radius = PIP_RADIUS * CANVAS_SIZE;
+      context.fillStyle = color;
+      for (const [row, column] of PIPS[value]) {
+        const x = GRID[column - 1] * CANVAS_SIZE;
+        const y = GRID[row - 1] * CANVAS_SIZE;
+        context.beginPath();
+        context.arc(x, y, radius, 0, Math.PI * 2);
+        context.fill();
+      }
+    },
+  );
+  if (!texture) return null;
 
-  if (!context) return null;
-
-  const radius = PIP_RADIUS * CANVAS_SIZE;
-  context.fillStyle = color;
-  for (const [row, column] of PIPS[value]) {
-    const x = GRID[column - 1] * CANVAS_SIZE;
-    const y = GRID[row - 1] * CANVAS_SIZE;
-    context.beginPath();
-    context.arc(x, y, radius, 0, Math.PI * 2);
-    context.fill();
-  }
-
-  const texture = durableLabelTexture(canvas);
   const material = new THREE.MeshBasicMaterial({
     map: texture,
     transparent: true,

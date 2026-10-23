@@ -11,6 +11,7 @@ import {
   type ColorPalette,
   type DiceColor,
 } from '../../../utils/settings';
+import { isCachedLabelTexture } from '../../../utils/labelTexture';
 import { degrees, type Rotation } from './useDiceInteraction';
 
 export type SceneBuild = {
@@ -78,7 +79,11 @@ export function useThreeStage({
           THREE.MeshBasicMaterial
         >;
         label.geometry.dispose();
-        label.material.map?.dispose();
+        // Cached label textures are shared across rebuilds — disposing one
+        // would blank it for every future die that reuses the cache entry.
+        if (label.material.map && !isCachedLabelTexture(label.material.map)) {
+          label.material.map.dispose();
+        }
         label.material.dispose();
       });
       meshRef.current = null;

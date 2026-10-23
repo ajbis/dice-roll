@@ -34,6 +34,25 @@ const SNAP_BACK_MS = 260;
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
 
+type AnimationOutcome = 'completed' | 'cancelled';
+
+/* Cancel the in-flight animation's rAF and settle its promise, so an awaiter
+   never hangs on a frame that will not run. Resolves rather than rejects to
+   keep the `void animateTo(...)` snap-back call rejection-free. */
+const settleAnimation = (
+  frameRef: { current: number | null },
+  resolveRef: { current: ((outcome: AnimationOutcome) => void) | null },
+  outcome: AnimationOutcome,
+) => {
+  if (frameRef.current) {
+    cancelAnimationFrame(frameRef.current);
+    frameRef.current = null;
+  }
+  const resolve = resolveRef.current;
+  resolveRef.current = null;
+  resolve?.(outcome);
+};
+
 const rotationFromQuaternion = (quaternion: THREE.Quaternion): Rotation => {
   const euler = new THREE.Euler().setFromQuaternion(quaternion, 'XYZ');
   return {
@@ -60,6 +79,9 @@ export function useDiceInteraction({
   const dragRef = useRef<DragState | null>(null);
   const dragFrameRef = useRef<number | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const animationResolveRef = useRef<
+    ((outcome: AnimationOutcome) => void) | null
+  >(null);
   const isRollingRef = useRef(false);
 
   const [isRolling, setIsRolling] = useState(false);
@@ -80,15 +102,17 @@ export function useDiceInteraction({
   }, []);
 
   const animateTo = useCallback(
-    (target: Rotation, duration: number) => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
+    (target: Rotation, duration: number): Promise<AnimationOutcome> => {
+      // A new animation supersedes any in-flight one: settle it first so its
+      // awaiter never hangs on a cancelled frame.
+      settleAnimation(animationFrameRef, animationResolveRef, 'cancelled');
 
       const start = { ...rotationRef.current };
       const startedAt = performance.now();
 
-      return new Promise<void>((resolve) => {
+      return new Promise<AnimationOutcome>((resolve) => {
+        animationResolveRef.current = resolve;
+
         const tick = (now: number) => {
           const progress = Math.min((now - startedAt) / duration, 1);
           const eased = easeOut(progress);
@@ -101,8 +125,11 @@ export function useDiceInteraction({
           if (progress < 1) {
             animationFrameRef.current = requestAnimationFrame(tick);
           } else {
-            animationFrameRef.current = null;
-            resolve();
+            settleAnimation(
+              animationFrameRef,
+              animationResolveRef,
+              'completed',
+            );
           }
         };
 
@@ -113,18 +140,18 @@ export function useDiceInteraction({
   );
 
   const animateQuaternion = useCallback(
-    (target: THREE.Quaternion, duration: number) => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
+    (target: THREE.Quaternion, duration: number): Promise<AnimationOutcome> => {
+      settleAnimation(animationFrameRef, animationResolveRef, 'cancelled');
 
       const mesh = meshRef.current;
-      if (!mesh) return Promise.resolve();
+      if (!mesh) return Promise.resolve<AnimationOutcome>('completed');
 
       const start = mesh.quaternion.clone();
       const startedAt = performance.now();
 
-      return new Promise<void>((resolve) => {
+      return new Promise<AnimationOutcome>((resolve) => {
+        animationResolveRef.current = resolve;
+
         const tick = (now: number) => {
           const progress = Math.min((now - startedAt) / duration, 1);
           mesh.quaternion.slerpQuaternions(start, target, easeOut(progress));
@@ -133,8 +160,11 @@ export function useDiceInteraction({
           if (progress < 1) {
             animationFrameRef.current = requestAnimationFrame(tick);
           } else {
-            animationFrameRef.current = null;
-            resolve();
+            settleAnimation(
+              animationFrameRef,
+              animationResolveRef,
+              'completed',
+            );
           }
         };
 
@@ -150,13 +180,26 @@ export function useDiceInteraction({
     setResult(null);
     setError(null);
 
+    /* A settings change cancels the animation mid-roll: reset so the die is
+       draggable again, resting at the interrupted pose. */
+    const abortRoll = () => {
+      restRef.current = rotationRef.current;
+      isRollingRef.current = false;
+      setIsRolling(false);
+    };
+
     try {
       const value = await fetchDiceRoll(optionsRef.current.sides);
       const targetQuaternion = optionsRef.current.resolveTarget(value);
       const from = rotationRef.current;
       const spun = planRoll(from, targetQuaternion, SPIN_TURNS);
-      await animateTo(spun, SPIN_MS);
-      await animateQuaternion(targetQuaternion, SETTLE_MS);
+      const spunOutcome = await animateTo(spun, SPIN_MS);
+      if (spunOutcome === 'cancelled') return abortRoll();
+      const settleOutcome = await animateQuaternion(
+        targetQuaternion,
+        SETTLE_MS,
+      );
+      if (settleOutcome === 'cancelled') return abortRoll();
       restRef.current = rotationRef.current;
       setIsRolling(false);
       isRollingRef.current = false;
@@ -233,9 +276,7 @@ export function useDiceInteraction({
   }, [animateTo, roll]);
 
   const cancelAnimation = useCallback(() => {
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-    }
+    settleAnimation(animationFrameRef, animationResolveRef, 'cancelled');
   }, []);
 
   return {

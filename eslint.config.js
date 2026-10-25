@@ -67,6 +67,10 @@ export default tseslint.config(
       // tests read the three.js scene graph and stage classes directly
       'testing-library/no-node-access': 'off',
       'testing-library/no-container': 'off',
+      'vitest/expect-expect': [
+        'error',
+        { assertFunctionNames: ['expect', 'expect*'] },
+      ],
     },
   },
   prettier,

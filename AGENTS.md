@@ -8,12 +8,25 @@
 - `yarn typecheck` — `tsc -b`
 - `yarn lint` / `yarn lint:styles` — eslint / stylelint
 - `yarn format` — prettier
+- `yarn test` / `yarn test:watch` / `yarn test:coverage` — vitest run / watch / v8 coverage (details in [Testing](#testing-vitest))
 
 ## Git
 
 - No global gitconfig on this machine — set identity per-commit (do not write git config):
   `git -c user.name='ajbis' -c user.email='1932972+ajbis@users.noreply.github.com' commit ...`
   (matches all existing commit authors)
+
+## Testing (vitest)
+
+- Config `vitest.config.ts`: jsdom, `globals: true`, include `**/__tests__/**/*.test.{ts,tsx}` — a file counts only with **both** the `__tests__` folder and the `.test.` suffix, so helper files live in `__tests__/helpers/` where the runner ignores them; `vitest.setup.ts` polyfills `document.fonts.load`, `ResizeObserver` and `crypto.getRandomValues`
+- Layout: a test sits in an `__tests__` folder beside its source, named `<source basename>.test.ts(x)`; `allDice.test.tsx` (the shared six-die suite) is the deliberate non-matching exception
+- `src/utils/__tests__/helpers/canvasStub.ts` records 2D-context calls — **never** `toEqual`/`toHaveBeenCalledWith` the recorder against itself (its `get` trap fabricates a fresh function per access → the paradoxical "no visual difference" failure); assert context identity with `toBe`
+- Dice component suites (`src/components/Dice/__tests__/`): each file declares its own `vi.mock` factories — `{ useDiceInteraction: vi.fn(), degrees: Math.PI / 180 }` (D4 imports `degrees` from that module too) and `{ useThreeStage: vi.fn() }` — and drives them through `helpers/diceHarness.tsx`: `mountDie()` installs the canvas stub, records both hooks' call options, exposes `build`/`buildWithLabels`; `nearLabels`/`farLabels` select children by `renderOrder`
+- **Draw tests must be the first test in their file**: the module-level label-texture cache only draws each (text, color) key once per file, and they build with the white palette (its label `#111827` ≠ far `#ffffff`, so near and far both actually draw)
+- `src/__tests__/App.test.tsx` mocks only `components/Dice` (a real die needs WebGL) and runs the real settings button/dialog end to end: query-string seed, `s`/`c`/`t` keys, dialog round-trip, focus return
+- Test-file lint rules that bite: `render-result-naming-convention` (name render results `view`/`utils`), `vitest/valid-title` (literal titles only — no computed conditionals), `vitest/expect-expect` (expects must sit inline in the test callback; a shared helper reference doesn't count), `@typescript-eslint/no-unnecessary-type-assertion`
+- The pre-commit hook is **lint-staged only** (eslint --fix + prettier on staged files) — no typecheck, no test run
+- D4 result-label settle: the tests assert the measured `(0, −0.280, 0.710643)` with up `(0, 0.9428, −0.3333)`; the `FourSidedDice.tsx` comment still quotes the older pre-`u = 0.625` measurement `(0, −0.283, 0.701)`
 
 ## Settings query strings (`src/utils/settings.ts`)
 
